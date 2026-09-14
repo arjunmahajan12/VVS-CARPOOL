@@ -29,7 +29,7 @@ A school carpooling app for **Vasant Valley School, Vasant Kunj, New Delhi** —
 
 - **Frontend:** React 19 + Vite 6 + TypeScript + Tailwind CSS v4
 - **Backend:** Supabase — Postgres + Auth (email/password) + Realtime + Row-Level Security, with all writes going through `SECURITY DEFINER` RPC functions
-- **Maps:** Mappls (MapmyIndia) Web SDK only — `VITE_MAPPLS_KEY` is required for the map to render (the app shows a clear configuration error otherwise). OSRM is used for road routing. Address search uses Mappls autosuggest + place details; if Mappls can't return coordinates for a chosen suggestion, the app falls back to the OpenStreetMap geocoder (full text, then the address, then the locality — a locality-only match is flagged *approximate* and the user is asked to fine-tune the pin).
+- **Maps:** Mappls (MapmyIndia) Web SDK only — `VITE_MAPPLS_KEY` is required for the map to render (the app shows a clear configuration error otherwise). OSRM is used for road routing. Address search uses Mappls autosuggest + place details (the placedetails plugin only yields coordinates when given a map, so the app keeps a tiny off-screen scratch map for that); if Mappls can't return coordinates for a chosen suggestion, the app falls back to the OpenStreetMap geocoder (full text, then the address, then the locality — a locality-only match is flagged *approximate* and the user is asked to fine-tune the pin).
 
 ## Two run modes
 
@@ -50,6 +50,7 @@ npm run build             # production build to dist/
 npm run test              # 242 assertions: trip model (logic-test.ts) + every API method (contract-test.ts)
 npm run test:sql          # 171 SQL assertions on a throwaway Postgres (schema loads twice + 2 scenarios)
 npm run test:e2e          # headless browser: 52 multi-role flow checks + 464 screen-matrix checks + 20 address-picker/map checks
+MAPPLS_KEY=… node tests/realmap.mjs   # loads the REAL Mappls SDK at your whitelisted origin (ORIGIN=https://…) and measures canvas size + live address search
 ```
 
 Coverage is measured, not assumed: all 76 `Backend` methods are asserted against the demo backend and all 71 RPC-backed methods against the real SQL. The screen matrix visits every screen for every role in light + dark at 360 px and 430 px and checks, by code, for horizontal overflow, unnamed buttons, unlabelled inputs and text below 3:1 contrast.
