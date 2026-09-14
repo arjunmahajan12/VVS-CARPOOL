@@ -1,0 +1,270 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------------
+   VVS Carpool — v8 design system
+   "The school's own safety app": trustworthy, warm, premium.
+   Display  Bricolage Grotesque 700/800  ·  Body/UI  DM Sans 400–700
+   Tokens live in @theme (→ CSS variables the map engine also reads).
+   Light values on :root, dark overrides under .dark (class-based).
+   ------------------------------------------------------------------------ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  /* ---- type ---------------------------------------------------------- */
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Bricolage Grotesque", "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --text-*: initial;
+  --text-xs: 12px;   --text-xs--line-height: 16px;
+  --text-sm: 13px;   --text-sm--line-height: 18px;
+  --text-base: 15px; --text-base--line-height: 22px;
+  --text-md: 17px;   --text-md--line-height: 24px;
+  --text-lg: 20px;   --text-lg--line-height: 26px;
+  --text-xl: 24px;   --text-xl--line-height: 30px;
+  --text-2xl: 30px;  --text-2xl--line-height: 36px;
+  --text-3xl: 38px;  --text-3xl--line-height: 44px;
+
+  /* ---- radius / shadow ---------------------------------------------- */
+  --radius-*: initial;
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+
+  --shadow-card: 0 1px 2px rgb(11 18 32 / 0.04), 0 8px 24px -12px rgb(11 18 32 / 0.16);
+  --shadow-sheet: 0 -8px 40px -12px rgb(11 18 32 / 0.28), 0 -1px 0 rgb(11 18 32 / 0.04);
+
+  /* ---- primary: marine blue ----------------------------------------- */
+  --color-primary-50: #EEF3FB;
+  --color-primary-100: #DBE5F6;
+  --color-primary-200: #BCCFEE;
+  --color-primary-300: #93B2E3;
+  --color-primary-400: #7FA6F0;
+  --color-primary-500: #3D6BC2;
+  --color-primary-600: #1F4B99;
+  --color-primary-700: #173B7A;
+  --color-primary-800: #122E5F;
+  --color-primary-900: #0E2349;
+
+  /* ---- accent: marigold (live / ETA / key CTA only) ----------------- */
+  --color-accent-50: #FFF8E1;
+  --color-accent-100: #FFEFB8;
+  --color-accent-200: #FFE08A;
+  --color-accent-300: #FBCF57;
+  --color-accent-400: #F7BC2E;
+  --color-accent-500: #F2A900;
+  --color-accent-600: #D99500;
+  --color-accent-700: #B37A00;
+  --color-accent-800: #8A5E00;
+
+  /* ---- ink (flips in dark) ------------------------------------------ */
+  --color-ink-950: #0B1220;
+  --color-ink-900: #111A2E;
+  --color-ink-700: #334155;
+  --color-ink-500: #64748B;
+  --color-ink-300: #CBD5E1;
+  --color-ink-200: #E2E8F0;
+  --color-ink-100: #EDF1F7;
+  --color-ink-50: #F5F7FB;
+
+  /* ---- surfaces (flip in dark) -------------------------------------- */
+  --color-bg: #F5F7FB;
+  --color-card: #FFFFFF;
+  --color-card-2: #F0F3F9;        /* inset / secondary surface on a card */
+  --color-line: #E6EAF2;          /* hairlines */
+  --color-line-strong: #CBD5E1;   /* inputs, emphasised borders */
+  --color-scrim: rgb(11 18 32 / 0.44);
+
+  /* ---- semantic (fixed) + soft/ink pairs (flip in dark) ------------- */
+  --color-ok: #10B981;
+  --color-ok-soft: #D6F5E9;
+  --color-ok-ink: #047857;
+  --color-warn: #F59E0B;
+  --color-warn-soft: #FEF0C7;
+  --color-warn-ink: #B45309;
+  --color-danger: #E11D48;
+  --color-danger-soft: #FFE1E7;
+  --color-danger-ink: #BE123C;
+  --color-info: #0EA5E9;
+  --color-info-soft: #DCF2FC;
+  --color-info-ink: #0369A1;
+
+  /* ---- role aliases (flip in dark) ---------------------------------- */
+  --color-primary: #1F4B99;          /* the brand colour for this theme */
+  --color-primary-strong: #173B7A;   /* hover / pressed */
+  --color-primary-soft: #EEF3FB;     /* soft button, selected chip */
+  --color-primary-soft-ink: #173B7A; /* text on primary-soft */
+  --color-on-primary: #FFFFFF;
+  --color-accent: #F2A900;
+  --color-accent-strong: #D99500;
+  --color-accent-soft: #FFF3CC;
+  --color-accent-soft-ink: #8A5E00;
+  --color-on-accent: #0B1220;
+  --color-focus: #3D6BC2;
+
+  /* ---- motion ------------------------------------------------------- */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+/* ---- dark overrides: same variable names, so every utility + the map
+        engine pick them up automatically ------------------------------- */
+@layer base {
+  .dark {
+    --color-ink-950: #F8FAFC;
+    --color-ink-900: #EEF2F8;
+    --color-ink-700: #C5CEDC;
+    --color-ink-500: #8B98AE;
+    --color-ink-300: #3B4A66;
+    --color-ink-200: #2C3A56;
+    --color-ink-100: #1D2A45;
+    --color-ink-50: #172239;
+
+    --color-bg: #0B1220;
+    --color-card: #141D33;
+    --color-card-2: #1B2642;
+    --color-line: #22304D;
+    --color-line-strong: #34456A;
+    --color-scrim: rgb(2 6 16 / 0.6);
+
+    --color-ok-soft: rgb(16 185 129 / 0.16);
+    --color-ok-ink: #5EEAB4;
+    --color-warn-soft: rgb(245 158 11 / 0.16);
+    --color-warn-ink: #FBC466;
+    --color-danger-soft: rgb(225 29 72 / 0.18);
+    --color-danger-ink: #FB8FA7;
+    --color-info-soft: rgb(14 165 233 / 0.16);
+    --color-info-ink: #6BCBF5;
+
+    --color-primary: #7FA6F0;
+    --color-primary-strong: #9DBBF4;
+    --color-primary-soft: rgb(127 166 240 / 0.14);
+    --color-primary-soft-ink: #A9C4F5;
+    --color-on-primary: #0B1220;
+    --color-accent: #F2A900;
+    --color-accent-strong: #FBCF57;
+    --color-accent-soft: rgb(242 169 0 / 0.16);
+    --color-accent-soft-ink: #FBCF57;
+    --color-on-accent: #0B1220;
+    --color-focus: #7FA6F0;
+
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 10px 28px -14px rgb(0 0 0 / 0.6);
+    --shadow-sheet: 0 -8px 40px -10px rgb(0 0 0 / 0.7), 0 -1px 0 rgb(255 255 255 / 0.04);
+  }
+}
+
+/* ------------------------------------------------------------------------ */
+@layer base {
+  :root { color-scheme: light; }
+  .dark { color-scheme: dark; }
+
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background: var(--color-bg);
+    color: var(--color-ink-900);
+    font-family: var(--font-sans);
+    font-size: var(--text-base);
+    line-height: var(--text-base--line-height);
+    font-optical-sizing: auto;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    font-optical-sizing: auto;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    color: var(--color-ink-950);
+  }
+  h1, h2, h3 { margin: 0; text-wrap: balance; }
+
+  b, strong { font-weight: 600; }
+  img, svg, video { display: block; max-width: 100%; }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  [hidden] { display: none !important; }
+
+  ::selection { background: color-mix(in srgb, var(--color-primary) 22%, transparent); }
+
+  /* Visible focus, everywhere, keyboard only. */
+  :focus { outline: none; }
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+    border-radius: var(--radius-xs);
+  }
+
+  /* Digits line up wherever they matter (ETA, delay, stats, timers). */
+  .tnum, time, [data-tnum] { font-variant-numeric: tabular-nums; }
+}
+
+@layer components {
+  /* Home live-trip hero: deep marine, one soft highlight, no rainbow. */
+  .hero-card {
+    background:
+      radial-gradient(90% 80% at 100% 0%, rgb(127 166 240 / 0.28), transparent 60%),
+      linear-gradient(160deg, var(--color-primary-700), var(--color-primary-900));
+    color: #fff;
+  }
+  .dark .hero-card {
+    background:
+      radial-gradient(90% 80% at 100% 0%, rgb(127 166 240 / 0.22), transparent 60%),
+      linear-gradient(160deg, #1B3A78, #0E2349);
+  }
+}
+
+/* Utilities declared with @utility so variants work (dark:hairline, md:pb-safe…). */
+@utility no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; &::-webkit-scrollbar { display: none; } }
+@utility tnum { font-variant-numeric: tabular-nums; }
+@utility pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+@utility pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+@utility pb-tabbar { padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
+@utility touch-target { min-width: 44px; min-height: 44px; }
+@utility text-balance { text-wrap: balance; }
+@utility text-pretty { text-wrap: pretty; }
+@utility hairline { box-shadow: inset 0 0 0 1px var(--color-line); }
+@utility glass {
+  background: color-mix(in srgb, var(--color-card) 82%, transparent);
+  -webkit-backdrop-filter: saturate(160%) blur(14px);
+  backdrop-filter: saturate(160%) blur(14px);
+}
+
+/* ---- motion ------------------------------------------------------------ */
+@keyframes ui-rise  { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes ui-pop   { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes ui-fade  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ui-spin  { to { transform: rotate(360deg); } }
+@keyframes ui-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes ui-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.85); } }
+@keyframes ui-ring  { 0% { transform: scale(0.6); opacity: 0.7; } 100% { transform: scale(2.2); opacity: 0; } }
+
+.anim-rise { animation: ui-rise 0.32s var(--ease-out-quint) both; }
+.anim-pop  { animation: ui-pop 0.2s var(--ease-out-quint) both; }
+.anim-fade { animation: ui-fade 0.18s ease both; }
+.anim-spin { animation: ui-spin 0.8s linear infinite; }
+.anim-pulse { animation: ui-pulse 1.6s ease-in-out infinite; }
+.anim-ring::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  background: currentColor; animation: ui-ring 1.8s var(--ease-out-quint) infinite;
+}
+.shimmer {
+  background: linear-gradient(100deg, var(--color-ink-200) 30%, var(--color-ink-100) 50%, var(--color-ink-200) 70%);
+  background-size: 200% 100%;
+  animation: ui-shimmer 1.6s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-rise, .anim-pop, .anim-fade, .anim-pulse, .shimmer { animation: none; }
+  .anim-ring::after { display: none; }
+  .anim-spin { animation-duration: 1.6s; }
+  *, ::before, ::after { transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
