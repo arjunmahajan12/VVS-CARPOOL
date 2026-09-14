@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "tsx logic-test.ts && tsx contract-test.ts",
     "test:sql": "bash supabase/_localtest/run.sh",
-    "test:e2e": "node tests/flows.e2e.mjs && node tests/matrix.e2e.mjs"
+    "test:e2e": "node tests/flows.e2e.mjs && node tests/matrix.e2e.mjs && node tests/picker.e2e.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

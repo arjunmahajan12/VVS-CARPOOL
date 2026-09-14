@@ -1,0 +1,12 @@
+Files that no longer exist in this version and MUST be deleted from your
+GitHub repository if you upload through the GitHub web page (the web
+uploader only adds/overwrites files — it never deletes):
+
+  src/components/map/LeafletMap.tsx
+  public/favicon.svg
+
+How to delete on github.com: open the file → click the trash-can icon
+(top right of the file view) → "Commit changes".
+
+(As of v8.6 the build no longer fails if LeafletMap.tsx is still present —
+tsconfig.app.json excludes it — but delete it anyway to keep the repo clean.)

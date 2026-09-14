@@ -29,7 +29,7 @@ A school carpooling app for **Vasant Valley School, Vasant Kunj, New Delhi** —
 
 - **Frontend:** React 19 + Vite 6 + TypeScript + Tailwind CSS v4
 - **Backend:** Supabase — Postgres + Auth (email/password) + Realtime + Row-Level Security, with all writes going through `SECURITY DEFINER` RPC functions
-- **Maps:** Mappls (MapmyIndia) Web SDK only — `VITE_MAPPLS_KEY` is required for the map to render (the app shows a clear configuration error otherwise). OSRM is used for road routing.
+- **Maps:** Mappls (MapmyIndia) Web SDK only — `VITE_MAPPLS_KEY` is required for the map to render (the app shows a clear configuration error otherwise). OSRM is used for road routing. Address search uses Mappls autosuggest + place details; if Mappls can't return coordinates for a chosen suggestion, the app falls back to the OpenStreetMap geocoder (full text, then the address, then the locality — a locality-only match is flagged *approximate* and the user is asked to fine-tune the pin).
 
 ## Two run modes
 
@@ -49,7 +49,7 @@ npm run dev               # local dev server
 npm run build             # production build to dist/
 npm run test              # 242 assertions: trip model (logic-test.ts) + every API method (contract-test.ts)
 npm run test:sql          # 171 SQL assertions on a throwaway Postgres (schema loads twice + 2 scenarios)
-npm run test:e2e          # headless browser: 52 multi-role flow checks + 464 screen-matrix checks
+npm run test:e2e          # headless browser: 52 multi-role flow checks + 464 screen-matrix checks + 20 address-picker/map checks
 ```
 
 Coverage is measured, not assumed: all 76 `Backend` methods are asserted against the demo backend and all 71 RPC-backed methods against the real SQL. The screen matrix visits every screen for every role in light + dark at 360 px and 430 px and checks, by code, for horizontal overflow, unnamed buttons, unlabelled inputs and text below 3:1 contrast.
@@ -67,6 +67,7 @@ End-to-end flows (multi-role, in a headless browser against `npm run build` + `n
 4. **Optional — demo accounts on the live site:** run `supabase/seed_demo.sql` in the SQL editor. It creates the seeded families (Asha, Vikram, Neha, Priya, the driver, Dadi, the admin…) as real logins with password `demo1234`, and switches on the one-tap "Demo quick login" panel on the sign-in screen. Demo accounts can also run the simulated drive. Re-run to reset them; delete their rows to remove them.
 5. Whitelist your origin(s) in the **Mappls** console for `VITE_MAPPLS_KEY` (the site's exact domain, e.g. `vvs-carpool-ch2.pages.dev`).
 6. Build with the three keys set, and deploy `dist/` to Cloudflare Pages (or any static host).
+7. **Uploading through the GitHub web page?** It never deletes files — see `DELETED_FILES.txt` for the files to remove by hand after each upload.
 
 ## Validating the schema
 

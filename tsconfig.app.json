@@ -17,5 +17,8 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Leaflet was removed in v8. The GitHub web uploader never deletes files, so a
+  // stale copy of LeafletMap.tsx in the repo must not break the build.
+  "exclude": ["src/components/map/LeafletMap.tsx", "src/**/*Leaflet*"]
 }
