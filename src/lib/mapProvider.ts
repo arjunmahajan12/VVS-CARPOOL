@@ -42,8 +42,12 @@ export function loadMappls(): Promise<boolean> {
       // plugins:true loads the whole plugin bundle (search + placedetails + …) — the
       // named list silently skips anything misspelt, and we need getPinDetails.
       MAPPLS_CLASS.initialize(KEY, { map: true, plugins: true }, () => done(sdkReady() || true));
+      // The wrapper only calls back once the (large) plugin bundle has also loaded —
+      // several seconds on a phone. The map itself only needs the core SDK, so
+      // resolve as soon as mappls.Map exists; plugin users wait via waitForSdkFn().
+      const poll = setInterval(() => { if (settled) { clearInterval(poll); return; } if (sdkReady()) { clearInterval(poll); done(true); } }, 100);
       // Safety net: if the callback never fires (blocked CDN, bad key), fail so the retry card shows.
-      setTimeout(() => done(state === "ok" || sdkReady()), LOAD_TIMEOUT_MS);
+      setTimeout(() => { clearInterval(poll); done(state === "ok" || sdkReady()); }, LOAD_TIMEOUT_MS);
     } catch { done(false); }
   });
   return promise;
@@ -90,16 +94,24 @@ const toNum = (v: unknown): number | undefined => {
 
 // Find the first latitude/longitude pair anywhere in a response object —
 // Mappls returns them at different depths depending on the endpoint/version.
-function findLatLng(node: any, depth = 0): { lat: number; lng: number } | null {
+// Never descends into a map instance (`map`/`_map`): it is huge and circular.
+const SKIP_KEYS = new Set(["map", "_map", "parent", "_parent", "obj_map"]);
+function findLatLng(node: any, depth = 0, seen = new WeakSet<object>()): LatLng | null {
   if (!node || typeof node !== "object" || depth > 5) return null;
-  const lat = toNum(node.latitude ?? node.lat), lng = toNum(node.longitude ?? node.lng ?? node.lon);
-  if (lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return { lat, lng };
-  for (const v of Array.isArray(node) ? node : Object.values(node)) {
-    const r = findLatLng(v, depth + 1);
+  if (typeof Element !== "undefined" && node instanceof Element) return null;
+  if (seen.has(node)) return null; seen.add(node);
+  const src = node._lngLat && typeof node._lngLat === "object" ? node._lngLat : node;
+  const lat = toNum(src.latitude ?? src.lat), lng = toNum(src.longitude ?? src.lng ?? src.lon);
+  if (lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && (lat !== 0 || lng !== 0)) return { lat, lng };
+  for (const [k, v] of Array.isArray(node) ? node.map((x, i) => [String(i), x] as const) : Object.entries(node)) {
+    if (SKIP_KEYS.has(k)) continue;
+    const r = findLatLng(v, depth + 1, seen);
     if (r) return r;
   }
   return null;
 }
+
+type LatLng = { lat: number; lng: number };
 
 // The plugin bundle (search, placedetails, …) is a second script that lands
 // after the core map SDK — so a plugin function can still be undefined for a
@@ -114,21 +126,51 @@ async function waitForSdkFn(name: string, ms = 6000): Promise<((...a: any[]) => 
   }
 }
 
-type LatLng = { lat: number; lng: number };
+// getPinDetails() only reveals coordinates by dropping a marker on a map —
+// without a `map` it returns just name/address/eloc (verified against the live
+// SDK). So we keep one tiny off-screen scratch map for the session and read the
+// marker's position back, then remove the marker. The visible map is never touched.
+let scratchMap: any = null;
+function scratchMapInstance(): any {
+  if (scratchMap) return scratchMap;
+  if (typeof document === "undefined") return null;
+  const id = "vvs-scratch-map";
+  let div = document.getElementById(id);
+  if (!div) {
+    div = document.createElement("div"); div.id = id; div.setAttribute("aria-hidden", "true");
+    div.style.cssText = "position:fixed;left:-10000px;top:0;width:64px;height:64px;pointer-events:none;opacity:0;overflow:hidden";
+    document.body.appendChild(div);
+  }
+  try { scratchMap = MAPPLS_CLASS.Map({ id, properties: { center: [28.53, 77.14], zoom: 3, zoomControl: false, fullscreenControl: false } }); } catch { scratchMap = null; }
+  return scratchMap;
+}
+function markerLatLng(obj: any): LatLng | null {
+  const mk = obj?.marker?.obj ?? obj?.marker ?? obj;
+  try { const p = mk?.getLngLat?.(); const r = findLatLng(p); if (r) return r; } catch { /* ignore */ }
+  try { const p = mk?.getPosition?.(); const r = findLatLng(p); if (r) return r; } catch { /* ignore */ }
+  return findLatLng(obj?.marker) || findLatLng(obj?.data) || findLatLng(obj) || null;
+}
 
-// Step 1 — Mappls placedetails plugin: getPinDetails({ pin }) → { latitude, longitude, … }.
+// Step 1 — Mappls placedetails plugin, with the scratch map so the position is materialised.
 async function resolveViaPlugin(eLoc: string): Promise<LatLng | null> {
   const ok = await loadMappls();
   if (!ok) return null;
   const gp = await waitForSdkFn("getPinDetails");
   if (!gp) return null;
+  const map = scratchMapInstance();
   return new Promise((resolve) => {
     let settled = false;
     const finish = (v: LatLng | null) => { if (!settled) { settled = true; resolve(v); } };
     try {
-      // infoDiv/markerPopup off: we only want the data, not the plugin's own UI.
-      gp({ pin: eLoc, infoDiv: false, markerPopup: false, fitbounds: false }, (data: any) => finish(findLatLng(data)));
-      setTimeout(() => finish(null), 8000);
+      const opts: Record<string, unknown> = { pin: eLoc, infoDiv: false, markerPopup: false, fitbounds: false };
+      if (map) opts.map = map;
+      gp(opts, (data: any) => {
+        const ll = markerLatLng(data);
+        try { data?.remove?.(); } catch { /* ignore */ }
+        try { data?.marker?.remove?.(); } catch { /* ignore */ }
+        finish(ll);
+      });
+      setTimeout(() => finish(null), 10000);
     } catch { finish(null); }
   });
 }

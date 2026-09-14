@@ -100,6 +100,7 @@ export default function MapplsMap(props: MapProps) {
       } catch (e) { setFailed(String((e as Error)?.message || e)); return; }
       if (!m) { setFailed("The map couldn't be created."); return; }
       map.current = m;
+      if ((window as unknown as { __vvsDebugMap?: boolean }).__vvsDebugMap) (window as unknown as { __vvsMap?: unknown }).__vvsMap = m; // test hook
       // The SDK measures its container once at creation; if the layout settles a
       // frame later (fonts, the sheet inset, dvh) the canvas stays small. Re-measure
       // whenever the holder changes size, and a few times right after creation.
@@ -294,7 +295,10 @@ export default function MapplsMap(props: MapProps) {
 
   return (
     <div ref={holder} className={`relative overflow-hidden ${className || "h-64 w-full"}`}>
-      <div id={id} className="absolute inset-0 z-0" aria-label="Map" />
+      {/* Inline geometry on purpose: the Mappls stylesheet adds `.mapboxgl-map { position: relative }`
+          to this element once the map is created, which beats a utility class and collapses the
+          canvas to the SDK's 150 px default. Inline styles always win. */}
+      <div id={id} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", zIndex: 0 }} aria-label="Map" />
       <MapSkeleton visible={!ready && !failed} insetBottom={padBottom} insetTop={padTop} />
       {failed && <MapError onRetry={() => setAttempt((n) => n + 1)} detail={failed} insetBottom={padBottom} insetTop={padTop} />}
     </div>

@@ -141,7 +141,7 @@ export default function LocationPicker({
           ) : note ? (
             <p className="text-amber-700 dark:text-amber-300">{note}</p>
           ) : has ? (
-            <p className="min-w-0 text-slate-500 dark:text-slate-400">
+            <p className="min-w-0 text-slate-500 dark:text-slate-400" data-pin-lat={value!.lat.toFixed(6)} data-pin-lng={value!.lng.toFixed(6)}>
               <span className="font-semibold text-slate-700 dark:text-slate-200">Pinned</span>
               {value!.address ? <> · <span className="break-words">{value!.address}</span></> : <> · {value!.lat.toFixed(5)}, {value!.lng.toFixed(5)}</>}
             </p>
