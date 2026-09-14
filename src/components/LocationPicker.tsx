@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import MapView from "./map/MapView";
 import { VVS, num } from "./map/mapTypes";
-import { HAS_MAPPLS, mapplsAutosuggest, mapplsResolveEloc, type MapplsSuggestion } from "../lib/mapProvider";
+import { HAS_MAPPLS, mapplsAutosuggest, resolveSuggestion, type MapplsSuggestion } from "../lib/mapProvider";
 
 export interface PickedLocation { lat: number; lng: number; address?: string; colony?: string; pincode?: string }
 
@@ -28,6 +28,7 @@ export default function LocationPicker({
   const [open, setOpen] = useState(false);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);   // soft hint (e.g. approximate pin)
   const [placedGen, setPlacedGen] = useState(0); // bump = re-centre the map (search / GPS), not on tap
   const box = useRef<HTMLDivElement>(null);
   const has = !!value && num(value.lat) && num(value.lng);
@@ -56,15 +57,13 @@ export default function LocationPicker({
   }, [open]);
 
   async function choose(s: MapplsSuggestion) {
-    setQ(s.placeName); setOpen(false); setSugs([]); setError(null);
-    let lat = s.lat, lng = s.lng;
-    if ((lat == null || lng == null) && s.eLoc) {
-      setSearching(true);
-      const c = await mapplsResolveEloc(s.eLoc);
-      setSearching(false);
-      if (c) { lat = c.lat; lng = c.lng; }
-    }
-    if (lat == null || lng == null) { setError("Couldn't get coordinates for that place — tap the map instead."); return; }
+    setQ(s.placeName); setOpen(false); setSugs([]); setError(null); setNote(null);
+    setSearching(true);
+    const c = await resolveSuggestion(s, has ? { lat: value!.lat, lng: value!.lng } : { lat: VVS[0], lng: VVS[1] });
+    setSearching(false);
+    if (!c) { setError("Couldn't get coordinates for that place — try a nearby landmark, or tap the map to drop the pin."); return; }
+    const { lat, lng } = c;
+    if (c.approx) setNote("We could only place the pin near that area — tap the map to put it exactly on your home.");
     const address = [s.placeName, s.placeAddress].filter(Boolean).join(", ");
     const pincode = address.match(/\b\d{6}\b/)?.[0];
     onChange({ lat, lng, address, pincode, colony: value?.colony });
@@ -126,7 +125,7 @@ export default function LocationPicker({
         <MapView
           center={center} zoom={15} className="h-full w-full"
           pins={has ? [{ id: `picked-${placedGen}`, lat: value!.lat, lng: value!.lng, kind: "home", label: pinLabel, selected: true }] : []}
-          onMapTap={(lat, lng) => { setError(null); onChange({ lat, lng, colony: value?.colony, pincode: value?.pincode }); }}
+          onMapTap={(lat, lng) => { setError(null); setNote(null); onChange({ lat, lng, colony: value?.colony, pincode: value?.pincode }); }}
         />
         {!has && (
           <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center">
@@ -135,10 +134,12 @@ export default function LocationPicker({
         )}
       </div>
 
-      {(error || has || hint) && (
+      {(error || note || has || hint) && (
         <div className="mt-2 flex items-start gap-2 text-[12.5px] leading-snug">
           {error ? (
             <p className="text-rose-600 dark:text-rose-400">{error}</p>
+          ) : note ? (
+            <p className="text-amber-700 dark:text-amber-300">{note}</p>
           ) : has ? (
             <p className="min-w-0 text-slate-500 dark:text-slate-400">
               <span className="font-semibold text-slate-700 dark:text-slate-200">Pinned</span>

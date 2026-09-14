@@ -58,12 +58,12 @@ export async function mapplsAutosuggest(query: string, near?: { lat: number; lng
   if (!query || query.trim().length < 3) return [];
   const ok = await loadMappls();
   if (!ok) return [];
+  const search = await waitForSdkFn("search");
+  if (!search) return [];
   return new Promise((resolve) => {
     let settled = false;
     const finish = (list: MapplsSuggestion[]) => { if (!settled) { settled = true; resolve(list); } };
     try {
-      const search = sdkGlobal()?.search;
-      if (typeof search !== "function") return finish([]);
       const opts: Record<string, unknown> = { region: "IND" };
       if (near) opts.location = [near.lat, near.lng];
       const handle = (data: any) => {
@@ -101,19 +101,83 @@ function findLatLng(node: any, depth = 0): { lat: number; lng: number } | null {
   return null;
 }
 
-// Resolve a Mappls eLoc code to coordinates (best-effort; null on failure).
-export async function mapplsResolveEloc(eLoc: string): Promise<{ lat: number; lng: number } | null> {
-  if (!eLoc) return null;
+// The plugin bundle (search, placedetails, …) is a second script that lands
+// after the core map SDK — so a plugin function can still be undefined for a
+// moment after initialize() has called back. Poll for it instead of failing.
+async function waitForSdkFn(name: string, ms = 6000): Promise<((...a: any[]) => any) | null> {
+  const t0 = Date.now();
+  for (;;) {
+    const fn = sdkGlobal()?.[name];
+    if (typeof fn === "function") return fn;
+    if (Date.now() - t0 > ms) return null;
+    await new Promise((r) => setTimeout(r, 150));
+  }
+}
+
+type LatLng = { lat: number; lng: number };
+
+// Step 1 — Mappls placedetails plugin: getPinDetails({ pin }) → { latitude, longitude, … }.
+async function resolveViaPlugin(eLoc: string): Promise<LatLng | null> {
   const ok = await loadMappls();
   if (!ok) return null;
+  const gp = await waitForSdkFn("getPinDetails");
+  if (!gp) return null;
   return new Promise((resolve) => {
     let settled = false;
-    const finish = (v: { lat: number; lng: number } | null) => { if (!settled) { settled = true; resolve(v); } };
+    const finish = (v: LatLng | null) => { if (!settled) { settled = true; resolve(v); } };
     try {
-      const gp = sdkGlobal()?.getPinDetails;
-      if (typeof gp !== "function") return finish(null);
-      gp({ pin: eLoc }, (data: any) => finish(findLatLng(data)));
+      // infoDiv/markerPopup off: we only want the data, not the plugin's own UI.
+      gp({ pin: eLoc, infoDiv: false, markerPopup: false, fitbounds: false }, (data: any) => finish(findLatLng(data)));
       setTimeout(() => finish(null), 8000);
     } catch { finish(null); }
   });
+}
+
+// Step 2 — geocode the suggestion's text with OpenStreetMap Nominatim (free,
+// CORS-enabled, India-restricted). Used only when Mappls can't give coordinates.
+async function resolveViaNominatim(text: string, near?: LatLng): Promise<LatLng | null> {
+  const q = text.trim();
+  if (!q) return null;
+  try {
+    const params = new URLSearchParams({ q, format: "jsonv2", limit: "1", countrycodes: "in" });
+    if (near) params.set("viewbox", `${near.lng - 0.4},${near.lat + 0.4},${near.lng + 0.4},${near.lat - 0.4}`);
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, { signal: ctrl.signal, headers: { Accept: "application/json" } });
+    clearTimeout(t);
+    if (!res.ok) return null;
+    const rows = await res.json();
+    return findLatLng(Array.isArray(rows) ? rows[0] : rows);
+  } catch { return null; }
+}
+
+// Resolve a Mappls eLoc code to coordinates (best-effort; null on failure).
+export async function mapplsResolveEloc(eLoc: string): Promise<LatLng | null> {
+  if (!eLoc) return null;
+  return resolveViaPlugin(eLoc);
+}
+
+export interface ResolvedPlace extends LatLng { approx: boolean; via: "suggestion" | "mappls" | "geocoder" }
+
+// Resolve a chosen suggestion to coordinates, trying every source in order:
+// coordinates already on the suggestion → Mappls placedetails → OSM geocoder on
+// the full "name, address" text → the address alone → progressively broader
+// tails of the address ("Sector C, Vasant Kunj, New Delhi" → "Vasant Kunj, New
+// Delhi"). Broader matches are flagged `approx` so the picker can ask the user
+// to fine-tune the pin instead of silently accepting a locality centroid.
+export async function resolveSuggestion(s: MapplsSuggestion, near?: LatLng): Promise<ResolvedPlace | null> {
+  if (s.lat != null && s.lng != null) return { lat: s.lat, lng: s.lng, approx: false, via: "suggestion" };
+  if (s.eLoc) { const c = await resolveViaPlugin(s.eLoc); if (c) return { ...c, approx: false, via: "mappls" }; }
+  const full = [s.placeName, s.placeAddress].filter(Boolean).join(", ");
+  const queries: { q: string; approx: boolean }[] = [{ q: full, approx: false }];
+  const parts = (s.placeAddress || "").split(",").map((x) => x.trim()).filter(Boolean);
+  for (let i = 0; i < Math.min(parts.length, 3); i++) queries.push({ q: parts.slice(i).join(", "), approx: i > 0 });
+  const seen = new Set<string>();
+  for (const { q, approx } of queries) {
+    if (seen.has(q)) continue; seen.add(q);
+    if (seen.size > 1) await new Promise((r) => setTimeout(r, 1100)); // Nominatim: ≤1 request/s
+    const c = await resolveViaNominatim(q, near);
+    if (c) return { ...c, approx, via: "geocoder" };
+  }
+  return null;
 }

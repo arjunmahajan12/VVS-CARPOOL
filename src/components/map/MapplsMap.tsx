@@ -38,6 +38,7 @@ export default function MapplsMap(props: MapProps) {
   const etaText = useRef("");
   const fitSig = useRef("");
   const trafficOn = useRef(false);
+  const resizeObs = useRef<ResizeObserver | null>(null);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -99,6 +100,15 @@ export default function MapplsMap(props: MapProps) {
       } catch (e) { setFailed(String((e as Error)?.message || e)); return; }
       if (!m) { setFailed("The map couldn't be created."); return; }
       map.current = m;
+      // The SDK measures its container once at creation; if the layout settles a
+      // frame later (fonts, the sheet inset, dvh) the canvas stays small. Re-measure
+      // whenever the holder changes size, and a few times right after creation.
+      const remeasure = () => { try { m.resize?.(); } catch { /* ignore */ } try { window.dispatchEvent(new Event("resize")); } catch { /* ignore */ } };
+      if (typeof ResizeObserver !== "undefined" && holder.current) {
+        resizeObs.current = new ResizeObserver(() => remeasure());
+        resizeObs.current.observe(holder.current);
+      }
+      [0, 150, 500, 1200].forEach((ms) => setTimeout(() => { if (!cancelled) remeasure(); }, ms));
       let done = false;
       const markReady = () => {
         if (done || cancelled) return; done = true;
@@ -117,6 +127,7 @@ export default function MapplsMap(props: MapProps) {
     return () => {
       cancelled = true;
       if (readyTimer) clearTimeout(readyTimer);
+      try { resizeObs.current?.disconnect(); } catch { /* ignore */ } resizeObs.current = null;
       const m = map.current;
       shapes.current = []; pinLayers.current = []; stopLayers.current = [];
       carMarker.current = null; etaMarker.current = null;
