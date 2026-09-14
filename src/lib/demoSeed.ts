@@ -17,6 +17,7 @@ export interface SeedFamily {
   existing_carpool: boolean; can_drive: boolean;
   status: "approved" | "pending";
   kids: SeedChild[];
+  vehicle?: Vehicle;
 }
 
 // Demo families. Distances from the school are realistic for the colony named.
@@ -24,6 +25,7 @@ export const FAMILIES: SeedFamily[] = [
   { id: "asha", name: "Asha Mehta", email: "asha@demo.in", phone: "+91 98111 11111",
     colony: "Vasant Kunj B-6", pincode: "110070", address: "B-6/142, Vasant Kunj",
     dLat: 0.012, dLng: 0.010, existing_carpool: false, can_drive: true, status: "approved",
+    vehicle: { make_model: "Maruti Ertiga", color: "Silver", plate: "DL 3C AB 1234", seats: 6 },
     kids: [{ name: "Riya Mehta", class_level: 6, gender: "female", allergies: "Peanut allergy — carries an EpiPen", emergency_name: "Asha Mehta", emergency_phone: "+91 98111 11111" }] },
   { id: "vikram", name: "Vikram Sharma", email: "vikram@demo.in", phone: "+91 98222 22222",
     colony: "Vasant Kunj C-9", pincode: "110070", address: "C-9/88, Vasant Kunj",

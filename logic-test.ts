@@ -246,6 +246,16 @@ async function run() {
   await as("neha@demo.in");
   ok((await api.myCarpools()).find((cc) => cc.id === created.id)?.is_creator === true, "ownership transfers when the organiser leaves");
 
+  // --- Hand-over rule: an organiser can only hand over to a car-owning family ---
+  await api.signIn("asha@demo.in", "");
+  const priyaPin = (await api.searchParents({})).parents.find((p: any) => p.name === "Priya Nair");
+  const ho = await api.createCarpool({ name: "Handover Pool", invite_ids: [priyaPin.id] });
+  await api.signIn("priya@demo.in", ""); await api.respondInvite(ho.id, true);
+  await api.signIn("asha@demo.in", ""); await api.leaveCarpool(ho.id);
+  await api.signIn("priya@demo.in", "");
+  ok(!(await api.myCarpools()).some((c2: any) => c2.id === ho.id), "organiser leaving with only car-less members closes the carpool (never hands to a family without a car)");
+  ok((await api.notifications()).some((n: any) => n.title.includes("Carpool closed")), "members are told the carpool closed");
+
   // --- Delete carpool: organiser only, never while live ---
   await as("vikram@demo.in");
   const del = await api.createCarpool({ name: "To Delete" });

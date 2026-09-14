@@ -1,7 +1,5 @@
-// ONE map provider, no silent fallbacks. With a Mappls key configured (the live
-// site) every map is Mappls; if the SDK can't load, MapplsMap shows an explicit
-// error + retry — it never quietly swaps to OpenStreetMap. Leaflet renders only
-// in keyless demo builds where the domain-locked key can't work.
+// ONE map provider: Mappls. If the SDK can't load (or no key was configured at
+// build time) MapplsMap shows an explicit error + retry — never another map.
 import { mappls } from "mappls-web-maps";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -12,9 +10,7 @@ export const LOAD_TIMEOUT_MS = 12000;
 // One shared Mappls class object for the whole app (Map/Marker/Polyline live on it).
 export const MAPPLS_CLASS: any = new mappls();
 
-export function useMapProvider(): "mappls" | "leaflet" {
-  return KEY ? "mappls" : "leaflet";
-}
+export function useMapProvider(): "mappls" { return "mappls"; }
 
 export type MapplsLoadState = "idle" | "loading" | "ok" | "fail";
 let state: MapplsLoadState = "idle";
@@ -43,7 +39,9 @@ export function loadMappls(): Promise<boolean> {
       resolve(ok);
     };
     try {
-      MAPPLS_CLASS.initialize(KEY, { map: true, plugins: ["search"] }, () => done(sdkReady() || true));
+      // plugins:true loads the whole plugin bundle (search + placedetails + …) — the
+      // named list silently skips anything misspelt, and we need getPinDetails.
+      MAPPLS_CLASS.initialize(KEY, { map: true, plugins: true }, () => done(sdkReady() || true));
       // Safety net: if the callback never fires (blocked CDN, bad key), fail so the retry card shows.
       setTimeout(() => done(state === "ok" || sdkReady()), LOAD_TIMEOUT_MS);
     } catch { done(false); }
@@ -90,6 +88,19 @@ const toNum = (v: unknown): number | undefined => {
   return typeof n === "number" && Number.isFinite(n) ? n : undefined;
 };
 
+// Find the first latitude/longitude pair anywhere in a response object —
+// Mappls returns them at different depths depending on the endpoint/version.
+function findLatLng(node: any, depth = 0): { lat: number; lng: number } | null {
+  if (!node || typeof node !== "object" || depth > 5) return null;
+  const lat = toNum(node.latitude ?? node.lat), lng = toNum(node.longitude ?? node.lng ?? node.lon);
+  if (lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return { lat, lng };
+  for (const v of Array.isArray(node) ? node : Object.values(node)) {
+    const r = findLatLng(v, depth + 1);
+    if (r) return r;
+  }
+  return null;
+}
+
 // Resolve a Mappls eLoc code to coordinates (best-effort; null on failure).
 export async function mapplsResolveEloc(eLoc: string): Promise<{ lat: number; lng: number } | null> {
   if (!eLoc) return null;
@@ -101,11 +112,7 @@ export async function mapplsResolveEloc(eLoc: string): Promise<{ lat: number; ln
     try {
       const gp = sdkGlobal()?.getPinDetails;
       if (typeof gp !== "function") return finish(null);
-      gp({ pin: eLoc }, (data: any) => {
-        const p = data?.data?.[0] || data?.[0] || data?.data || data;
-        const lat = toNum(p?.latitude ?? p?.lat), lng = toNum(p?.longitude ?? p?.lng);
-        finish(lat != null && lng != null ? { lat, lng } : null);
-      });
+      gp({ pin: eLoc }, (data: any) => finish(findLatLng(data)));
       setTimeout(() => finish(null), 8000);
     } catch { finish(null); }
   });

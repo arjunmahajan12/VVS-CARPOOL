@@ -1,6 +1,6 @@
 // One tap to start a trip — everything else is decided by two simple rules:
-//   * DIRECTION is decided by the CLOCK. Before 11:00 it's the school run;
-//     from 11:00 it's the home run. No questions, no GPS guessing.
+//   * DIRECTION is chosen by the organiser when starting: "To school" or
+//     "To home" — two separate routes, never inferred from the clock or GPS.
 //   * The ROUTE always collects the organising family first. School run:
 //     driver's live position → the organiser's home → the other homes in
 //     optimal road order → school. Home run: school first, then the drop
@@ -11,7 +11,6 @@ import { api } from "./api";
 import { optimalOrder, type Stop } from "./optimize";
 import { roadMatrix } from "./routing";
 import type { School } from "./types";
-import { directionNow } from "./format";
 
 export function currentPosition(timeoutMs = 4000): Promise<{ lat: number; lng: number } | null> {
   return new Promise((resolve) => {
@@ -26,10 +25,6 @@ export function currentPosition(timeoutMs = 4000): Promise<{ lat: number; lng: n
   });
 }
 
-// Before 11:00 → school run. From 11:00 → home run. That's the whole rule.
-export function inferDirection(): "to_school" | "from_school" {
-  return directionNow(); // IST clock (SPEC §1.1)
-}
 
 // Ordered stop list for a school run: the organiser's children first (their
 // home anchors the route), then the other homes optimally from there to school.
@@ -61,7 +56,7 @@ export async function computeOrder(
   return optimalOrder(pts, org, null, matrix).map((s) => s.id);
 }
 
-// One call that does everything: clock → direction, organiser-first optimal
+// One call that does everything: the chosen direction, organiser-first optimal
 // order, driver's real origin, start.
 export async function startTripSmart(opts: {
   carpoolId: string;
@@ -70,8 +65,9 @@ export async function startTripSmart(opts: {
   riders: { child_id: string; parent_id: string; home_lat?: number | null; home_lng?: number | null; absent?: boolean }[];
   school: School;
   creatorHome: { lat: number; lng: number } | null;
+  direction: "to_school" | "from_school";
 }) {
-  const direction = inferDirection();
+  const direction = opts.direction;
   const pos = await currentPosition();
   const origin = pos ?? (direction === "to_school" ? opts.creatorHome : { lat: opts.school.lat, lng: opts.school.lng });
   const active = opts.riders.filter((r) => !r.absent && r.home_lat != null);

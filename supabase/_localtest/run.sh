@@ -11,3 +11,4 @@ echo "=== authmock ==="; PSQL "-f $HERE/00_authmock.sql" | grep -v '^$' | tail -
 echo "=== schema (load 1) ==="; out=$(PSQL "-f $SQ/schema.sql"); echo "$out" | grep -iE 'error|fatal' | head -20; echo "load1_errors=$(echo "$out" | grep -icE 'error|fatal')"
 echo "=== schema (load 2 — idempotency) ==="; out2=$(PSQL "-f $SQ/schema.sql"); echo "$out2" | grep -iE 'error|fatal' | head -20; echo "load2_errors=$(echo "$out2" | grep -icE 'error|fatal')"
 echo "=== scenario ==="; PSQL "-f $HERE/01_scenario.sql" | grep -iE 'error|fatal|ASSERT|SCENARIO' | head -200
+echo "=== contract ==="; PSQL "-f $HERE/02_contract.sql" | grep -iE 'error|fatal|ASSERT|CONTRACT' | head -200

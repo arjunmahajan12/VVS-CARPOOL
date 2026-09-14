@@ -1,10 +1,12 @@
-// Auth — sign in / create account. In demo mode a set of one-tap logins
-// covers every role so reviewers can tour the app without typing.
-import { useState, type FormEvent } from "react";
+// Auth — sign in / create account. A set of one-tap demo logins covers every
+// role so reviewers can tour the app without typing — always in demo mode, and
+// on a live site once seed_demo.sql has been run (settings.demo_logins).
+import { useEffect, useState, type FormEvent } from "react";
 import { Car, LockKeyhole, Mail, ShieldCheck, Sparkles, UserRound, Users } from "lucide-react";
 import { useAuth } from "../context/auth";
-import { MODE } from "../lib/api";
-import { Button, Card, Divider, Input, SegmentedControl, useToast, cn } from "../components/ui";
+import { api, MODE } from "../lib/api";
+import { DEMO_PASSWORD } from "../lib/demoAccounts";
+import { Button, Card, Divider, Input, Logo, SegmentedControl, useToast, cn } from "../components/ui";
 
 type Mode = "signin" | "signup";
 
@@ -29,6 +31,8 @@ export default function Auth() {
   const { signIn, signUp } = useAuth();
   const toast = useToast();
   const [mode, setMode] = useState<Mode>("signin");
+  const [demoLogins, setDemoLogins] = useState(MODE === "demo");
+  useEffect(() => { if (MODE === "live") api.publicConfig().then((c) => setDemoLogins(!!c.demo_logins)).catch(() => {}); }, []);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState<string | null>(null); // email being signed in
@@ -59,7 +63,7 @@ export default function Auth() {
   return (
     <div className="flex min-h-dvh flex-col px-5 pb-10 pt-safe">
       <header className="flex items-center gap-3 pt-10">
-        <span className="grid h-12 w-12 place-items-center rounded-md bg-primary text-on-primary shadow-card"><Car size={24} strokeWidth={2.25} aria-hidden /></span>
+        <Logo size={72} />
         <div>
           <p className="font-display text-xs font-bold uppercase tracking-[0.14em] text-ink-500">Vasant Valley School</p>
           <h1 className="text-xl leading-7">VVS Carpool</h1>
@@ -101,7 +105,7 @@ export default function Auth() {
         </p>
       </form>
 
-      {MODE === "demo" && (
+      {demoLogins && (
         <section className="mt-2">
           <Divider label={<span className="inline-flex items-center gap-1.5"><Sparkles size={13} aria-hidden /> Demo quick login</span>} />
           <div className="grid gap-3 *:min-w-0">
@@ -117,7 +121,7 @@ export default function Auth() {
                     {g.items.map((q) => (
                       <li key={q.email} className="min-w-0">
                         <button
-                          type="button" disabled={!!busy} onClick={() => void go(q.email, "demo", "signin")}
+                          type="button" disabled={!!busy} onClick={() => void go(q.email, DEMO_PASSWORD, "signin")}
                           className="flex w-full items-center gap-3 rounded-sm px-2 py-2 text-left transition-colors hover:bg-ink-50 active:bg-ink-100 disabled:opacity-60"
                         >
                           <span className="min-w-0 flex-1">

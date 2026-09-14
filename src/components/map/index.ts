@@ -1,7 +1,6 @@
 // Public surface of the map engine.
 export { default as MapView } from "./MapView";
 export { default as MapplsMap } from "./MapplsMap";
-export { default as LeafletMap } from "./LeafletMap";
 export { default as BottomSheet, SheetHeader, useSheet, useSheetInset } from "../BottomSheet";
 export type { BottomSheetProps } from "../BottomSheet";
 export { default as LocationPicker } from "../LocationPicker";

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Car, CheckCircle2, Clapperboard, Flag, Hand, LocateFixed, MapPin, Navigation, Phone, Radio, Satellite, Square, TrafficCone, Undo2, UserRound, XCircle } from "lucide-react";
 import { useAuth } from "../context/auth";
 import { api, MODE } from "../lib/api";
+import { isDemoAccount } from "../lib/demoAccounts";
 import { keepFresh } from "../lib/bus";
 import { nav } from "../lib/nav";
 import { directionLabel, fmtTime, timeAgo } from "../lib/format";
@@ -35,7 +36,7 @@ const EVENT_ICON: Record<string, { icon: typeof Radio; cls: string }> = {
 };
 
 export default function LiveTrip({ rideId }: { rideId: string }) {
-  const { user } = useAuth();
+  const { user, refresh } = useAuth();
   const u = user!;
   const toast = useToast();
   const confirm = useConfirm();
@@ -52,6 +53,8 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
   const [ended, setEnded] = useState(false);
   const [sim, setSim] = useState<SimState>({ rideId: null, running: false, step: 0, total: 0 });
   const [gps, setGps] = useState<"off" | "on" | "error">("off");
+  const [phoneEdit, setPhoneEdit] = useState<string | null>(null); // null = not editing
+  const autoStarted = useRef(false);
   const [busy, setBusy] = useState<string | null>(null);
   const routeKey = useRef("");
   const gpsWatch = useRef<number | null>(null);
@@ -87,7 +90,12 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
   // stop GPS when leaving the screen
   useEffect(() => () => stopGps(), []);
 
-  const isDriver = !!ride && (ride.driver_user_id === u.id || !!ride.carpool?.is_org_household);
+  // Driver controls: the person driving this trip, or the organising parent
+  // (who can end/correct their own carpool's trip). Other add-ons only follow.
+  const isDriver = !!ride && (ride.driver_user_id === u.id || (!!ride.carpool?.is_org_household && u.role === "parent"));
+  // The simulated drive is a demo tool: always in demo mode, and for the seeded
+  // demo accounts on a live site (so a reviewer can run a trip without a car).
+  const canSimulate = MODE === "demo" || isDemoAccount(u.email);
   const toSchool = ride?.direction !== "from_school";
   const school = ride?.school ?? null;
 
@@ -117,6 +125,25 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
   const riders: Rider[] = ride?.carpool?.riders ?? [];
   const myRiders = riders.filter((r) => r.parent_id === myHousehold);
   const doneCount = stops.filter((s) => s.status === "done").length;
+
+  // Tracking is mandatory: it starts by itself for the person driving this trip
+  // the moment the live trip opens (no "Share GPS" tap). Simulation, if running,
+  // takes precedence so a demo isn't fought by a desk's GPS.
+  const amTheDriver = !!ride && ride.driver_user_id === u.id && ride.status === "active";
+  useEffect(() => {
+    if (!amTheDriver || autoStarted.current || (sim.running && sim.rideId === rideId)) return;
+    autoStarted.current = true;
+    startGps();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [amTheDriver]);
+  useEffect(() => () => stopGps(), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function savePhone() {
+    const v = (phoneEdit ?? "").trim();
+    if (!/^\+?[\d\s-]{8,16}$/.test(v)) { toast.warn("Enter a valid mobile number, e.g. +91 98xxx xxxxx"); return; }
+    try { await api.updateProfile({ phone: v }); await refresh(); await load(); setPhoneEdit(null); toast.ok("Number updated — parents see it on this trip."); }
+    catch (e) { toast.danger(e instanceof Error ? e.message : "Couldn't save the number."); }
+  }
 
   // ---- driver: GPS sharing (throttled ~3 s + heartbeat while parked)
   function stopGps() {
@@ -210,7 +237,9 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
       else if (s.kind === "drop" && rs === "boarded") trailing = <Button size="sm" variant="soft" loading={busy === s.id} onClick={() => markDropped(s)}>Dropped</Button>;
       else if (s.kind === "school" && toSchool && riders.some((r) => r.status === "boarded")) trailing = <Button size="sm" variant="soft" loading={busy === "school"} onClick={markReachedSchool}>At school</Button>;
     }
-    return { id: s.id, seq: s.seq, label: s.label, sub: s.sub ?? undefined, status: s.status, etaMin: s.eta_min, delayMin: s.delay_min, isNext: next?.id === s.id, trailing };
+    const parentPhone = isDriver && s.child_id ? ride?.carpool?.members.find((m) => m.parent_id === s.parent_id)?.phone : null;
+    const sub = [s.sub, parentPhone].filter(Boolean).join(" · ") || undefined;
+    return { id: s.id, seq: s.seq, label: s.label, sub, status: s.status, etaMin: s.eta_min, delayMin: s.delay_min, isNext: next?.id === s.id, trailing };
   });
   const feed = [...events].sort((a, b) => (a.created_at < b.created_at ? 1 : -1)).slice(0, 12);
   const simActive = sim.running && sim.rideId === rideId;
@@ -265,16 +294,36 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
                 <div className="flex items-start gap-3">
                   <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-md", sharing ? "bg-accent-soft text-accent-soft-ink" : "bg-ink-100 text-ink-700")}>{simActive ? <Clapperboard size={20} aria-hidden /> : <Satellite size={20} aria-hidden />}</span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-base font-semibold text-ink-900">{simActive ? "Simulating the drive" : gps === "on" ? "Sharing your location" : "You're driving this trip"}</p>
-                    <p className="text-sm text-ink-500">Hands-free: keep the phone in the car. Children check in by themselves when you genuinely stop at their door — driving past never counts.</p>
+                    <p className="text-base font-semibold text-ink-900">{simActive ? "Simulating the drive" : gps === "on" ? "Tracking from this phone" : gps === "error" ? "Location blocked" : amTheDriver ? "Starting tracking…" : "You're driving this trip"}</p>
+                    <p className="text-sm text-ink-500">
+                      {gps === "error"
+                        ? "Allow location access for this site (browser → site settings) and tap Retry. Parents can't follow the car until then."
+                        : "Tracking runs automatically while this trip is open — keep the phone in the car. Children check in by themselves when you genuinely stop at their door; driving past never counts."}
+                    </p>
                   </div>
+                </div>
+                {/* the number parents call — shown and editable, per the school */}
+                <div className="flex items-center gap-2 rounded-md bg-bg px-3 py-2 text-sm">
+                  <Phone size={15} className="shrink-0 text-ink-500" aria-hidden />
+                  {phoneEdit === null ? (
+                    <>
+                      <span className="tnum min-w-0 flex-1 truncate text-ink-900">{ride.driver_phone || u.phone || <span className="text-danger">No number on file</span>}</span>
+                      {amTheDriver && <button type="button" className="text-xs font-semibold text-primary" onClick={() => setPhoneEdit(u.phone ?? ride.driver_phone ?? "")}>Edit</button>}
+                    </>
+                  ) : (
+                    <>
+                      <input id="driver-phone" type="tel" inputMode="tel" autoFocus value={phoneEdit} onChange={(e) => setPhoneEdit(e.target.value)} placeholder="+91 98xxx xxxxx" className="tnum min-w-0 flex-1 rounded-sm border border-line bg-card px-2 py-1 text-sm text-ink-900" />
+                      <button type="button" className="text-xs font-semibold text-primary" onClick={() => void savePhone()}>Save</button>
+                      <button type="button" className="text-xs font-semibold text-ink-500" onClick={() => setPhoneEdit(null)}>Cancel</button>
+                    </>
+                  )}
                 </div>
                 {simActive && <div className="h-1.5 overflow-hidden rounded-full bg-ink-100"><div className="h-full rounded-full bg-accent transition-[width] duration-500" style={{ width: `${sim.total ? Math.round((sim.step / sim.total) * 100) : 0}%` }} /></div>}
                 <div className="grid grid-cols-2 gap-2 *:min-w-0">
                   {gps === "on"
-                    ? <Button variant="soft" icon={Square} onClick={stopGps}>Stop sharing</Button>
-                    : <Button variant={simActive ? "soft" : "accent"} icon={Satellite} onClick={startGps}>Share GPS</Button>}
-                  {MODE === "demo" && (simActive
+                    ? <Button variant="soft" icon={Satellite} disabled>Tracking on</Button>
+                    : <Button variant={simActive ? "soft" : "accent"} icon={Satellite} onClick={startGps}>{gps === "error" ? "Retry location" : "Start tracking"}</Button>}
+                  {canSimulate && (simActive
                     ? <Button variant="ghost" icon={Square} onClick={() => stopSimulation()}>Pause sim</Button>
                     : <Button variant="soft" icon={Clapperboard} onClick={simulate} disabled={!stops.length}>Simulate trip</Button>)}
                 </div>

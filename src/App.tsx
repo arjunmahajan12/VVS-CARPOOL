@@ -1,5 +1,5 @@
 // App root: theme boot, providers, and the auth gate.
-//   loading → spinner · needsOnboarding → Onboarding · no user → Auth · else Shell
+//   loading → spinner · needsOnboarding → Onboarding · no user → Auth · new terms → Terms · else Shell
 import { useEffect } from "react";
 import { AuthProvider, useAuth } from "./context/auth";
 import { ConfirmHost, Spinner, ToastHost } from "./components/ui";
@@ -7,6 +7,7 @@ import { initTheme } from "./lib/theme";
 import Auth from "./screens/Auth";
 import Onboarding from "./screens/Onboarding";
 import Shell from "./screens/Shell";
+import Terms from "./screens/Terms";
 
 function Gate() {
   const { user, loading, needsOnboarding } = useAuth();
@@ -22,6 +23,8 @@ function Gate() {
   }
   if (needsOnboarding) return <Onboarding />;
   if (!user) return <Auth />;
+  // A new Terms version blocks parents until accepted (add-ons follow their parent; admins publish them).
+  if (user.role === "parent" && user.needs_tnc) return <Terms />;
   return <Shell />;
 }
 

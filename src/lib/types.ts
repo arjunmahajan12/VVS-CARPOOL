@@ -49,7 +49,7 @@ export interface Discovery {
 
 export interface Member {
   parent_id: string; parent_name: string; phone?: string | null; colony?: string | null;
-  existing_carpool: boolean; role: "creator" | "member";
+  existing_carpool: boolean; can_drive?: boolean; role: "creator" | "member";
   status: "invited" | "joined" | "rejected" | "left" | "requested";
   home_lat?: number | null; home_lng?: number | null; child_id?: string; child_name?: string;
 }

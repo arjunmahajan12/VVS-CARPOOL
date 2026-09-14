@@ -3,13 +3,13 @@
 // parent with a car multi-selects families and creates a carpool with them;
 // a car-less parent sees carpools only and requests a seat.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Car, Check, Compass, MapPin, Plus, Route, SlidersHorizontal, Users, X } from "lucide-react";
+import { Car, Check, Compass, MapPin, Phone, Plus, Route, SlidersHorizontal, Users, X } from "lucide-react";
 import { useAuth } from "../context/auth";
 import { api } from "../lib/api";
 import { nav } from "../lib/nav";
 import { classLabel } from "../lib/format";
 import type { Discovery, Filters, NearbyCarpool, ParentPin } from "../lib/types";
-import { Avatar, Button, Card, Chip, EmptyState, IconButton, Input, Pill, SegmentedControl, Skeleton, TopBar, useToast, cn } from "../components/ui";
+import { Avatar, Button, Card, Chip, EmptyState, IconButton, Input, Pill, SegmentedControl, Skeleton, TopBar, useConfirm, useToast, cn } from "../components/ui";
 import { BottomSheet, MapView, SheetHeader, VVS, useSheetInset, type MapPin as Pin } from "../components/map";
 
 const RADII = ["1", "2", "3", "5", "all"] as const;
@@ -23,6 +23,7 @@ export default function Discover() {
   const { user } = useAuth();
   const u = user!;
   const toast = useToast();
+  const confirm = useConfirm();
   const sheet = useSheetInset();
   const canDrive = u.role === "parent" && u.can_drive !== false;
   const approved = u.status === "approved";
@@ -40,6 +41,7 @@ export default function Discover() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [seats, setSeats] = useState("4");
+  const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [requesting, setRequesting] = useState<string | null>(null);
   const [snap, setSnap] = useState<number | undefined>(undefined);
@@ -88,6 +90,7 @@ export default function Discover() {
   const togglePick = (id: string) => setPicked((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
   async function requestSeat(c: NearbyCarpool) {
+    if (!(await confirm({ title: `Request a seat in "${c.name}"?`, message: "If the organiser approves, your name, phone number, child's name and approximate home are shared with this carpool's families, and the organiser's household will drive your child. Continue?", confirmLabel: "Request seat", danger: false }))) return;
     setRequesting(c.id);
     try { await api.requestJoinCarpool(c.id); toast.ok(`Seat requested in "${c.name}" — the organiser will be notified.`); await load(); }
     catch (e) { toast.danger(e instanceof Error ? e.message : "Couldn't request a seat."); }
@@ -98,6 +101,7 @@ export default function Discover() {
     if (!nm) { toast.warn("Give your carpool a name."); return; }
     const n = Number(seats);
     if (!Number.isFinite(n) || n < 1 || n > 8) { toast.warn("Seats must be between 1 and 8."); return; }
+    if (!consent) { toast.warn("Please confirm the organiser commitments first."); return; }
     setBusy(true);
     try {
       const cp = await api.createCarpool({ name: nm, seats: n, invite_ids: picked });
@@ -177,9 +181,15 @@ export default function Discover() {
               <div className="flex flex-wrap gap-1.5">
                 {picked.map((id) => { const p = parents.find((x) => x.id === id); return p ? <Chip key={id} size="sm" selected onRemove={() => togglePick(id)}>{p.name.split(" ")[0]}</Chip> : null; })}
               </div>
+              <label className="flex cursor-pointer items-start gap-3 rounded-md bg-primary-soft/60 p-3 text-sm text-ink-700">
+                <input id="carpool-consent" type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-primary)]" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
+                <span>
+                  <b className="text-ink-900">As the organiser I confirm</b> that my household will drive every trip of this carpool, that my car is roadworthy and insured, that I'll share my live location while driving, and that my name, phone number and approximate home are shown to the families who join.
+                </span>
+              </label>
               <div className="grid grid-cols-2 gap-2 *:min-w-0">
                 <Button variant="ghost" onClick={() => setCreating(false)} disabled={busy}>Back</Button>
-                <Button loading={busy} onClick={create} icon={Car}>Create carpool</Button>
+                <Button loading={busy} onClick={create} icon={Car} disabled={!consent}>Create carpool</Button>
               </div>
             </Card>
           )}
@@ -241,6 +251,7 @@ function FamilyCard({ p, canDrive, picked, onPick, onOpen, expanded }: { p: Pare
             <span className="inline-flex items-center gap-1"><MapPin size={12} aria-hidden />{fmtKm(p.distance_km)} from you</span>
             {detour != null && <span className={cn("inline-flex items-center gap-1", detour < 0.8 && "text-ok-ink")}><Route size={12} aria-hidden />{detour < 0.3 ? "on your way" : `+${fmtKm(detour)} detour`}</span>}
             {p.colony && <span>{p.colony}</span>}
+            {p.phone && <a href={`tel:${p.phone}`} onClick={(e) => e.stopPropagation()} className="inline-flex items-center gap-1 font-medium text-primary"><Phone size={12} aria-hidden />{p.phone}</a>}
           </span>
           {expanded && (
             <span className="mt-2 block text-sm text-ink-700">

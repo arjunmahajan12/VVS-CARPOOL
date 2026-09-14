@@ -10,10 +10,6 @@ export function istHour(d: Date = new Date()): number {
   return ist / 60;
 }
 
-/** SPEC §1.1 — before 11:00 IST a trip is a school run, from 11:00 a home run. */
-export function directionNow(d: Date = new Date()): Direction {
-  return istHour(d) < 11 ? "to_school" : "from_school";
-}
 
 export function directionLabel(dir: Direction | null | undefined): string {
   return dir === "from_school" ? "Home run" : "School run";

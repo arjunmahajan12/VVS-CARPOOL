@@ -10,9 +10,9 @@ is reference only — nothing in it is sacred except the **product rules** below
 
 These were decided with the school and are the spec, not implementation detail.
 
-1. **Direction is the clock.** A trip started before **11:00 IST** is a *school run*
-   (`to_school`); from 11:00 it is a *home run* (`from_school`). Never guessed
-   from GPS, never asked.
+1. **Two routes, chosen explicitly.** Every carpool has a *school run* (`to_school`)
+   and a *home run* (`from_school`). The organiser picks which one to start —
+   never inferred from the clock or GPS.
 2. **Route.** School run: driver's live position → **organiser's home first** →
    the other homes in optimal road order → school. Home run: school → drop
    points optimally, **ending at the organiser's home**.
@@ -31,7 +31,7 @@ These were decided with the school and are the spec, not implementation detail.
    (dropped, or flagged missed). Home runs end when the car reaches the organiser's
    home. Any trip still open after midnight IST is auto-closed on next touch.
 8. **Removed for good:** manual driver "confirm boarding", ratings, SOS.
-9. Carpools have **no time/days fields** — trips are ad-hoc, direction by clock.
+9. Carpools have **no time/days fields** — trips are ad-hoc; the organiser picks the route.
 
 ## 2. v8 modules (all built for real)
 
@@ -41,7 +41,7 @@ These were decided with the school and are the spec, not implementation detail.
 | **Trip replay + punctuality analytics** | Full ping trail stored (with speed/heading) and replayable with a scrubber. Per-carpool + school-wide stats: on-time %, avg pickup delay, missed-stop rate, avg duration, trend. |
 | **Web push** | Real device push (service worker + VAPID) for arriving / boarded / missed / trip started / correction. Supabase Edge Function fires on `notifications` insert via DB webhook. In-app inbox stays as the fallback. |
 | **Configurable geofences + anomaly rules** | School-level settings for every fence radius, dwell, off-route threshold, long-stop and speeding thresholds, school bell times. Long-stop and speeding anomalies feed the incident log and alert the carpool. |
-| **Full-bleed map + bottom sheet** | Discover, Carpool detail and Live trip are map-first: edge-to-edge Mappls with a draggable sheet (snap points). Rich layers (see §5). Leaflet parity for keyless demo. |
+| **Full-bleed map + bottom sheet** | Discover, Carpool detail and Live trip are map-first: edge-to-edge Mappls with a draggable sheet (snap points). Rich layers (see §5). Mappls only — no other map provider. |
 | **Complete UI rebuild** | New design system (§6). Every screen rebuilt (§7). Skeletons, empty states, error states everywhere. No placeholders. |
 
 ## 3. Data model (Supabase Postgres) — additions to the v7 tables

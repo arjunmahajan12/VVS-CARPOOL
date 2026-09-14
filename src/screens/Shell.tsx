@@ -52,6 +52,10 @@ export default function Shell() {
   const route = useRoute();
   const toast = useToast();
   const isAdmin = user?.role === "admin";
+  // Family add-ons (grandparents, drivers, helpers) follow trips and alerts —
+  // they don't discover families or manage the family, so no Discover tab.
+  const isAddon = user?.role === "addon";
+  const tabs = APP_TABS.filter((t) => !(isAddon && t.key === "discover"));
   const [unread, setUnread] = useState(0);
 
   const loadUnread = useCallback(async () => {
@@ -98,7 +102,7 @@ export default function Shell() {
     case "tab":
       screen =
         route.tab === "home" ? (isAdmin ? <Admin tab="dashboard" /> : <Home />)
-        : route.tab === "discover" ? (isAdmin ? <Admin tab="verify" /> : <Discover />)
+        : route.tab === "discover" ? (isAdmin ? <Admin tab="verify" /> : isAddon ? <Home /> : <Discover />)
         : route.tab === "carpools" ? (isAdmin ? <Admin tab="carpools" /> : <Carpools />)
         : route.tab === "alerts" ? <Alerts onRead={() => setUnread(0)} />
         : <Profile />;
@@ -120,7 +124,7 @@ export default function Shell() {
       <main className={withTabs ? "pb-tabbar" : undefined}>{screen}</main>
       {withTabs && (
         <TabBar
-          tabs={APP_TABS.map((t) => (t.key === "alerts" ? { ...t, badge: unread || undefined } : t))}
+          tabs={tabs.map((t) => (t.key === "alerts" ? { ...t, badge: unread || undefined } : t))}
           active={activeTab}
           onChange={onTab}
           className="mx-auto max-w-[480px]"

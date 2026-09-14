@@ -106,6 +106,12 @@ function senderName(userId: string): Promise<string> {
 }
 
 export const supabaseBackend: Backend = {
+  // ---- pre-login ----
+  publicConfig: async () => {
+    try { const r = await rpc<{ demo_logins?: boolean; school_name?: string }>("app_public_config"); return { demo_logins: !!r?.demo_logins, school_name: r?.school_name ?? null }; }
+    catch { return { demo_logins: false, school_name: null }; }
+  },
+
   // ---- auth / profile ----
   signIn: async (email, password) => {
     const { error } = await sb().auth.signInWithPassword({ email, password });
@@ -138,7 +144,7 @@ export const supabaseBackend: Backend = {
   acceptTnc: async () => rpc<Profile>("app_accept_tnc"),
   latestTnc: async () => rpc<{ version: number; body: string } | null>("app_latest_tnc"),
   addTrusted: async (t) => rpc<Profile>("app_add_trusted", { t }),
-  removeTrusted: async (id: string) => rpc<Profile>("app_remove_trusted", { id }),
+  removeTrusted: async (id: string) => rpc<Profile>("app_remove_trusted", { trusted_id: id }),
 
   // ---- driver (family add-on with relation 'driver') ----
   getDriverProfile: async () => rpc<Profile>("app_get_driver_profile"),

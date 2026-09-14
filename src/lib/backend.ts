@@ -12,6 +12,9 @@ import type {
 export type Unsub = () => void;
 
 export interface Backend {
+  // ---- pre-login ----
+  publicConfig(): Promise<{ demo_logins: boolean; school_name?: string | null }>;
+
   // ---- auth / profile ----
   signIn(email: string, password: string): Promise<SignInResult>;
   signUp(email: string, password: string): Promise<SignInResult>;

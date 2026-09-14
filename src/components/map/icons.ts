@@ -1,4 +1,4 @@
-// Inline SVG builders shared by the Mappls and Leaflet maps.
+// Inline SVG builders used by the Mappls map.
 //
 // CRITICAL: Mappls injects icon data-URLs into CSS `url(...)`, and
 // encodeURIComponent leaves "(" and ")" raw — a single parenthesis (rgba(),
@@ -138,7 +138,7 @@ export function calloutIcon(label: string, etaMin: number | null | undefined, li
 // ---------------------------------------------------------------- car
 // Heading-rotated puck with a soft halo. Rotation is baked into the arrow path
 // (no transform="rotate()" — parens!). `centred` = the puck is centred in the
-// box (Leaflet, which can anchor at the centre); otherwise bottom-anchored.
+// box when the SDK anchors at the centre; otherwise bottom-anchored.
 export function carIcon(headingDeg: number | null | undefined, centred = true): IconSpec {
   const size = 44, cx = size / 2, cy = size / 2;
   const h = centred ? size : size + cy; // bottom-anchored version adds space below so the puck sits ON the point

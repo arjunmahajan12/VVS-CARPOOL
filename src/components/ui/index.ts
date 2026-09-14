@@ -43,3 +43,4 @@ export { Divider } from "./Divider";
 export type { DividerProps } from "./Divider";
 export { SectionTitle } from "./SectionTitle";
 export type { SectionTitleProps } from "./SectionTitle";
+export { Logo } from "./Logo";

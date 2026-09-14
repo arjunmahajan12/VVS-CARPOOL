@@ -300,7 +300,7 @@ create or replace function _carpool_json(cid uuid, viewer uuid, with_ride boolea
 begin
 return (
   with ms as (
-    select m.parent_id, p.name parent_name, p.phone, p.colony, p.existing_carpool, m.role, m.status,
+    select m.parent_id, p.name parent_name, p.phone, p.colony, p.existing_carpool, p.can_drive, m.role, m.status,
            p.home_lat, p.home_lng, (select id from children where parent_id=p.id order by id limit 1) child_id,
            (select name from children where parent_id=p.id order by id limit 1) child_name
       from carpool_members m join profiles p on p.id=m.parent_id where m.carpool_id=cid),
@@ -323,7 +323,8 @@ return (
     'members',coalesce((select jsonb_agg(to_jsonb(ms)) from ms),'[]'::jsonb),
     'joined',coalesce((select jsonb_agg(to_jsonb(ms)) from ms where status='joined'),'[]'::jsonb),
     'riders',coalesce((select jsonb_agg(to_jsonb(rd)) from rd),'[]'::jsonb),
-    'my_status',(select status from ms where parent_id=viewer),
+    -- membership is per household: an add-on shares their parent's status
+    'my_status',(select status from ms where parent_id=coalesce((select parent_owner_id from profiles where id=viewer and role='addon'),viewer)),
     'is_creator',(c.creator_id=viewer),
     'is_org_household',(_anchor()=c.creator_id),
     'active_ride', case when with_ride then
@@ -358,7 +359,9 @@ begin
 return (
   select jsonb_build_object(
     'id',r.id,'carpool_id',r.carpool_id,'driver_name',r.driver_name,
-    'driver_user_id',r.driver_user_id,'driver_phone',r.driver_phone,'driver_vehicle',r.driver_vehicle,
+    'driver_user_id',r.driver_user_id,
+    -- the driver's CURRENT number (editable during the trip), falling back to what was captured at start
+    'driver_phone',coalesce((select nullif(p.phone,'') from profiles p where p.id=r.driver_user_id), r.driver_phone),'driver_vehicle',r.driver_vehicle,
     'order',coalesce(r.pickup_order,'[]'::jsonb),'status',r.status,
     'direction',coalesce(r.direction,'to_school'),
     'origin_lat',r.origin_lat,'origin_lng',r.origin_lng,
@@ -626,7 +629,7 @@ begin
       (filters->>'class_max' is null or exists(select 1 from children c where c.parent_id=b.id and c.class_level <= (filters->>'class_max')::int)) and
       (filters->>'gender' is null or exists(select 1 from children c where c.parent_id=b.id and c.gender = filters->>'gender')))
   select coalesce(jsonb_agg(jsonb_build_object(
-      'id',f.id,'name',f.name,'colony',f.colony,'pincode',f.pincode,'phone',null,
+      'id',f.id,'name',f.name,'colony',f.colony,'pincode',f.pincode,'phone',f.phone,
       'home_lat',round(f.home_lat::numeric,3),'home_lng',round(f.home_lng::numeric,3),
       'existing_carpool',f.existing_carpool,
       'children',coalesce((select jsonb_agg(jsonb_build_object('name',c.name,'class_level',c.class_level,'gender',c.gender)) from children c where c.parent_id=f.id),'[]'::jsonb),
@@ -658,8 +661,8 @@ end $$;
 create or replace function app_my_carpools() returns jsonb language sql stable security definer as $$
   select coalesce(jsonb_agg(_carpool_json(id, auth.uid())),'[]'::jsonb) from (
     select distinct c.id from carpools c
-     where c.creator_id=auth.uid()
-        or c.id in (select carpool_id from carpool_members where parent_id=auth.uid())) x
+     where c.creator_id=_anchor()
+        or c.id in (select carpool_id from carpool_members where parent_id=_anchor())) x
 $$;
 create or replace function app_get_carpool(carpool_id uuid) returns jsonb language plpgsql stable security definer as $$
 #variable_conflict use_column
@@ -677,6 +680,9 @@ create or replace function app_create_carpool(data jsonb) returns jsonb language
 declare cid uuid; myname text; iid uuid;
 begin
   perform _require_approved();
+  if (select role from profiles where id=auth.uid()) <> 'parent' then
+    raise exception 'Only a parent can create a carpool.';
+  end if;
   if (select can_drive from profiles where id=auth.uid()) is false then
     raise exception 'Only a parent with a car can create a carpool — you can join one instead from the Find tab.';
   end if;
@@ -749,13 +755,33 @@ end $$;
 
 create or replace function app_leave_carpool(carpool_id uuid) returns jsonb language plpgsql security definer as $$
 #variable_conflict use_column
-declare nextp uuid;
+declare nextp uuid; nm text; me text; a uuid;
 begin
+  if exists(select 1 from rides r where r.carpool_id=app_leave_carpool.carpool_id and r.status='active') then
+    raise exception 'End the live trip before leaving this carpool.';
+  end if;
+  select name into nm from carpools where id=app_leave_carpool.carpool_id;
+  select name into me from profiles where id=auth.uid();
   update carpool_members set status='left' where carpool_id=app_leave_carpool.carpool_id and parent_id=auth.uid();
   if exists(select 1 from carpools where id=app_leave_carpool.carpool_id and creator_id=auth.uid()) then
-    select parent_id into nextp from carpool_members where carpool_id=app_leave_carpool.carpool_id and status='joined' and parent_id<>auth.uid() limit 1;
-    if nextp is not null then update carpools set creator_id=nextp where id=app_leave_carpool.carpool_id; update carpool_members set role='creator' where carpool_id=app_leave_carpool.carpool_id and parent_id=nextp;
-    else delete from carpools where id=app_leave_carpool.carpool_id; end if;
+    -- ONE carpool = ONE driving family: hand over only to a family that has a car.
+    select m.parent_id into nextp from carpool_members m join profiles p on p.id=m.parent_id
+      where m.carpool_id=app_leave_carpool.carpool_id and m.status='joined' and m.parent_id<>auth.uid() and p.can_drive
+      order by m.parent_id limit 1;
+    if nextp is not null then
+      update carpools set creator_id=nextp, driver_name=null, driver_phone=null, driver_vehicle=null where id=app_leave_carpool.carpool_id;
+      update carpool_members set role='creator' where carpool_id=app_leave_carpool.carpool_id and parent_id=nextp;
+      update carpool_members set role='member' where carpool_id=app_leave_carpool.carpool_id and parent_id=auth.uid();
+      perform _notify(nextp,'You now organise "'||nm||'"', me||' left — your household drives its trips from now on.','info');
+      for a in select _audience(app_leave_carpool.carpool_id) loop
+        if a <> nextp then perform _notify(a,'New organiser', me||' left "'||nm||'"; '||(select name from profiles where id=nextp)||' now organises it.','info'); end if;
+      end loop;
+    else
+      for a in select _audience(app_leave_carpool.carpool_id) loop perform _notify(a,'Carpool closed','"'||nm||'" closed — the organiser left and no other family has a car to drive it.','info'); end loop;
+      delete from carpools where id=app_leave_carpool.carpool_id;
+    end if;
+  else
+    for a in select _audience(app_leave_carpool.carpool_id) loop perform _notify(a,'A family left', me||' left "'||nm||'".','info'); end loop;
   end if;
   return jsonb_build_object('ok',true);
 end $$;
@@ -791,7 +817,7 @@ begin
       from profiles p where p.id=org and p.can_drive
     union all
     select d.id, d.name, 'driver'::text kind, d.phone, (d.vehicle->>'plate') vehicle,
-           (select name from profiles where id=org) owner_name, (d.driver_status='verified') confirmed, 2 ord
+           (select name from profiles where id=org) owner_name, coalesce(d.driver_status='verified',false) confirmed, 2 ord
       from profiles d where d.parent_owner_id=org and d.role='addon' and d.relation='driver')
   select coalesce(jsonb_agg(jsonb_build_object('id',id,'name',name,'kind',kind,'phone',phone,'vehicle',vehicle,'owner_name',owner_name,'confirmed',confirmed) order by ord, name),'[]'::jsonb)
     into result from cand;
@@ -822,9 +848,9 @@ begin
     cands := app_trip_drivers(app_start_ride.carpool_id);
     if driver_user_id is not null then select v into chosen from jsonb_array_elements(cands) t(v) where (v->>'id')::uuid = app_start_ride.driver_user_id; end if;
     if chosen is null then select v into chosen from jsonb_array_elements(cands) t(v) where (v->>'id')::uuid = auth.uid(); end if;
-    if chosen is null then select v into chosen from jsonb_array_elements(cands) t(v) where (v->>'confirmed')::boolean limit 1; end if;
+    if chosen is null then select v into chosen from jsonb_array_elements(cands) t(v) where coalesce((v->>'confirmed')::boolean,false) limit 1; end if;
     if chosen is null then raise exception 'No one is set to drive this trip yet — pick a driver first.'; end if;
-    if not (chosen->>'confirmed')::boolean then raise exception '% is not confirmed to drive yet — the family must confirm their licence and vehicle first.', chosen->>'name'; end if;
+    if not coalesce((chosen->>'confirmed')::boolean,false) then raise exception '% is not confirmed to drive yet — the family must confirm their licence and vehicle first.', chosen->>'name'; end if;
     select * into du from profiles where id=(chosen->>'id')::uuid;
     if chosen->>'kind' = 'driver' then
       expired := exists(select 1 from driver_documents where driver_id=du.id and type in ('licence','insurance') and expiry is not null and expiry < current_date);
@@ -874,6 +900,17 @@ begin
       seq := seq + 1;
       insert into ride_stops(ride_id,child_id,seq,kind,lat,lng,label)
         values (rid,srow.cid,seq,case when to_school then 'pickup' else 'drop' end,srow.home_lat,srow.home_lng,srow.cname);
+    end loop;
+    -- absent children still get a stop row, marked 'skipped', so the rail shows "Absent"
+    -- (SPEC §3); they are never routed, never ETA'd and never counted as missed.
+    for srow in select ch.id cid, ch.name cname, pr.home_lat, pr.home_lng
+                  from carpool_members m3 join profiles pr on pr.id=m3.parent_id join children ch on ch.parent_id=pr.id
+                 where m3.carpool_id=app_start_ride.carpool_id and m3.status='joined' and pr.home_lat is not null
+                   and exists(select 1 from absences ab where ab.carpool_id=app_start_ride.carpool_id and ab.child_id=ch.id and ab.on_date=current_date)
+                   and (to_school or pr.id <> fam) loop
+      seq := seq + 1;
+      insert into ride_stops(ride_id,child_id,seq,kind,lat,lng,label,status)
+        values (rid,srow.cid,seq,case when to_school then 'pickup' else 'drop' end,srow.home_lat,srow.home_lng,srow.cname,'skipped');
     end loop;
     if to_school then
       seq := seq + 1;
@@ -1339,7 +1376,8 @@ $$;
 create or replace function app_update_child(child_id uuid, patch jsonb) returns jsonb language plpgsql security definer as $$
 #variable_conflict use_column
 begin
-  update children set allergies=coalesce(patch->>'allergies',allergies), emergency_name=coalesce(patch->>'emergency_name',emergency_name),
+  update children set name=coalesce(nullif(trim(patch->>'name'),''),name), class_level=coalesce((patch->>'class_level')::int,class_level),
+    allergies=coalesce(patch->>'allergies',allergies), emergency_name=coalesce(patch->>'emergency_name',emergency_name),
     emergency_phone=coalesce(patch->>'emergency_phone',emergency_phone), gender=coalesce(patch->>'gender',gender)
   where id=app_update_child.child_id and parent_id=auth.uid();
   return _profile_json(auth.uid());
@@ -1347,20 +1385,30 @@ end $$;
 
 create or replace function app_add_trusted(t jsonb) returns jsonb language plpgsql security definer as $$
 begin insert into trusted_pickups(parent_id,name,phone) values (auth.uid(),t->>'name',t->>'phone'); return _profile_json(auth.uid()); end $$;
-create or replace function app_remove_trusted(id uuid) returns jsonb language plpgsql security definer as $$
-begin delete from trusted_pickups where id=app_remove_trusted.id and parent_id=auth.uid(); return _profile_json(auth.uid()); end $$;
+drop function if exists app_remove_trusted(uuid);
+create or replace function app_remove_trusted(trusted_id uuid) returns jsonb language plpgsql security definer as $$
+begin delete from trusted_pickups t where t.id=trusted_id and t.parent_id=auth.uid(); return _profile_json(auth.uid()); end $$;
 
 -- ---------------------------------------------------------------- chat ----
-create or replace function app_get_chat(carpool_id uuid) returns jsonb language sql stable security definer as $$
-  select coalesce(jsonb_agg(jsonb_build_object('id',m.id,'carpool_id',m.carpool_id,'sender_id',m.sender_id,
-    'sender_name',(select name from profiles where id=m.sender_id),'body',m.body,'created_at',m.created_at) order by m.created_at),'[]'::jsonb)
-  from chat_messages m where m.carpool_id=carpool_id
+-- Chat is private to the carpool: joined households (incl. their add-ons) and the school admin.
+create or replace function _chat_member(cid uuid) returns boolean language sql stable as $$
+  select _is_admin() or exists(select 1 from carpool_members m where m.carpool_id=cid and m.status='joined' and m.parent_id=_anchor())
 $$;
+create or replace function app_get_chat(carpool_id uuid) returns jsonb language plpgsql stable security definer as $$
+#variable_conflict use_column
+begin
+  if not _chat_member(app_get_chat.carpool_id) then raise exception 'Only members of this carpool can read its chat.'; end if;
+  return (select coalesce(jsonb_agg(jsonb_build_object('id',m.id,'carpool_id',m.carpool_id,'sender_id',m.sender_id,
+    'sender_name',(select name from profiles where id=m.sender_id),'body',m.body,'created_at',m.created_at) order by m.created_at),'[]'::jsonb)
+  from chat_messages m where m.carpool_id=app_get_chat.carpool_id);
+end $$;
 create or replace function app_send_chat(carpool_id uuid, body text) returns jsonb language plpgsql security definer as $$
 #variable_conflict use_column
 declare mid uuid; myname text; a uuid;
 begin
-  insert into chat_messages(carpool_id,sender_id,body) values (app_send_chat.carpool_id, auth.uid(), app_send_chat.body) returning id into mid;
+  if not _chat_member(app_send_chat.carpool_id) then raise exception 'Only members of this carpool can post in its chat.'; end if;
+  if coalesce(trim(app_send_chat.body),'') = '' then raise exception 'Message is empty.'; end if;
+  insert into chat_messages(carpool_id,sender_id,body) values (app_send_chat.carpool_id, auth.uid(), left(app_send_chat.body, 1000)) returning id into mid;
   select name into myname from profiles where id=auth.uid();
   for a in select _audience(app_send_chat.carpool_id) loop if a<>auth.uid() then perform _notify(a,'New message',myname||': '||left(body,40),'chat'); end if; end loop;
   return jsonb_build_object('id',mid,'carpool_id',carpool_id,'sender_id',auth.uid(),'sender_name',myname,'body',body,'created_at',now());
@@ -1468,6 +1516,13 @@ end $$;
 
 -- ------------------------------------------------------------ settings ----
 -- Settings shape (types.ts). Any signed-in user may read; only the admin writes.
+-- Public (pre-login) config: whether demo quick-logins are seeded (seed_demo.sql).
+alter table settings add column if not exists demo_logins boolean not null default false;
+create or replace function app_public_config() returns jsonb language sql stable security definer as $$
+  select jsonb_build_object('demo_logins', coalesce(demo_logins,false), 'school_name', school_name) from settings where id=1
+$$;
+grant execute on function app_public_config() to anon, authenticated;
+
 create or replace function app_get_settings() returns jsonb language plpgsql stable security definer as $$
 begin
   if auth.uid() is null then raise exception 'Sign in first'; end if;

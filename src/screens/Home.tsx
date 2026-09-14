@@ -1,13 +1,14 @@
 // Home — the parent's morning glance: live trip hero (if any), today's
-// direction from the clock, quick actions, my carpools, latest alerts, and a
+// quick actions, my carpools, latest alerts, and a
 // one-time push nudge. Pending / rejected families see a friendly holding state.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, BellRing, Car, ChevronRight, Compass, Clock3, Hourglass, MapPin, Navigation, ShieldAlert, Users, X } from "lucide-react";
+import { Bell, BellRing, Car, ChevronRight, Compass, Hourglass, MapPin, Navigation, ShieldAlert, Users, X } from "lucide-react";
 import { useAuth } from "../context/auth";
 import { api, MODE } from "../lib/api";
+import { isDemoAccount } from "../lib/demoAccounts";
 import { keepFresh } from "../lib/bus";
 import { nav } from "../lib/nav";
-import { directionLabel, directionNow, firstName, fmtTime, greeting, timeAgo } from "../lib/format";
+import { directionLabel, firstName, fmtTime, greeting, timeAgo } from "../lib/format";
 import { pushPermission, subscribePush } from "../lib/push";
 import type { Carpool, Notification, Ride, Stop } from "../lib/types";
 import { Avatar, AvatarStack, Button, Card, EmptyState, IconButton, LiveBadge, Pill, SectionTitle, Skeleton, TopBar, useToast, cn } from "../components/ui";
@@ -114,7 +115,7 @@ export default function Home() {
   const [nudge, setNudge] = useState(false);
   const approved = u.status === "approved";
   const isAddon = u.role === "addon";
-  const direction = directionNow();
+  const canSimulate = MODE === "demo" || isDemoAccount(u.email);
 
   const load = useCallback(async () => {
     try {
@@ -155,15 +156,6 @@ export default function Home() {
       />
 
       <div className="grid gap-4 px-4 pb-6 pt-1 *:min-w-0">
-        {/* Today's direction hint */}
-        <div className="flex items-center gap-2 text-sm text-ink-700">
-          <Clock3 size={15} className="text-ink-500" aria-hidden />
-          <span>
-            {direction === "to_school" ? "Before 11 am — trips started now are " : "After 11 am — trips started now are "}
-            <b>{directionLabel(direction).toLowerCase()}s</b>
-          </span>
-        </div>
-
         {error && (
           <Card variant="outline" padding="sm" className="flex items-center gap-3 text-sm">
             <ShieldAlert size={18} className="shrink-0 text-danger" aria-hidden />
@@ -230,9 +222,9 @@ export default function Home() {
                 <Card>
                   <EmptyState
                     icon={Car}
-                    title={canDrive ? "No carpool yet" : "You're not in a carpool yet"}
-                    sub={canDrive ? "Invite a few neighbours and you're set — you'll drive, they'll ride along." : "Ask a neighbour with a car for a seat, or request one from Discover."}
-                    action={<Button size="sm" variant="soft" icon={Compass} onClick={() => nav.tab("discover")}>Find neighbours</Button>}
+                    title={isAddon ? "No family carpool yet" : canDrive ? "No carpool yet" : "You're not in a carpool yet"}
+                    sub={isAddon ? "Once the parent joins or creates a carpool, its trips appear here." : canDrive ? "Invite a few neighbours and you're set — you'll drive, they'll ride along." : "Ask a neighbour with a car for a seat, or request one from Discover."}
+                    action={isAddon ? undefined : <Button size="sm" variant="soft" icon={Compass} onClick={() => nav.tab("discover")}>Find neighbours</Button>}
                   />
                 </Card>
               ) : (
@@ -288,7 +280,7 @@ export default function Home() {
           </div>
         </section>
 
-        {MODE === "demo" && approved && !isAddon && (
+        {canSimulate && approved && !isAddon && (
           <p className="flex items-center gap-1.5 text-xs text-ink-500"><Navigation size={12} aria-hidden /> Demo: open a carpool and start a trip to see the live card here.</p>
         )}
       </div>

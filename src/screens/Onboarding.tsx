@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, ArrowRight, Car, CheckCircle2, FileText, MapPin, UserRound, Users } from "lucide-react";
 import { useAuth } from "../context/auth";
 import { api } from "../lib/api";
-import { Button, Card, Input, Select, Skeleton, useToast, cn } from "../components/ui";
+import { Button, Card, Input, Logo, Select, Skeleton, useToast, cn } from "../components/ui";
 import { LocationPicker, type PickedLocation } from "../components/map";
 
 type Invite = { name: string; relation: string; parent_name: string };
@@ -126,7 +126,7 @@ export default function Onboarding() {
   return (
     <div className="min-h-dvh px-5 pb-10 pt-safe">
       <header className="flex items-center gap-3 pt-8">
-        <span className="grid h-10 w-10 place-items-center rounded-sm bg-primary text-on-primary"><Car size={20} strokeWidth={2.25} aria-hidden /></span>
+        <Logo size={40} />
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-500">Step {step + 1} of 3</p>
           <p className="truncate text-sm text-ink-700">{email}</p>

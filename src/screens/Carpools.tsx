@@ -8,16 +8,18 @@ import { api } from "../lib/api";
 import { keepFresh } from "../lib/bus";
 import { nav } from "../lib/nav";
 import type { Carpool, Member } from "../lib/types";
-import { Avatar, AvatarStack, Button, Card, EmptyState, LiveBadge, Pill, SectionTitle, Skeleton, TopBar, useToast } from "../components/ui";
+import { Avatar, AvatarStack, Button, Card, EmptyState, LiveBadge, Pill, SectionTitle, Skeleton, TopBar, useConfirm, useToast } from "../components/ui";
 
 export default function Carpools() {
   const { user } = useAuth();
   const u = user!;
   const toast = useToast();
+  const confirm = useConfirm();
   const [pools, setPools] = useState<Carpool[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const canDrive = u.role === "parent" && u.can_drive !== false;
+  const isAddon = u.role === "addon";
 
   const load = useCallback(async () => {
     try { setPools(await api.myCarpools()); setError(null); }
@@ -31,6 +33,7 @@ export default function Carpools() {
   const requestsForMe = (pools ?? []).flatMap((c) => (c.is_creator ? c.members.filter((m) => m.status === "requested").map((m) => ({ c, m })) : []));
 
   async function respondInvite(c: Carpool, accept: boolean) {
+    if (accept && !(await confirm({ title: `Join "${c.name}"?`, message: "By joining, your name, phone number, child's name and approximate home are shared with this carpool's families, and the organiser's household will drive your child. Continue?", confirmLabel: "Join carpool", danger: false }))) return;
     setBusy(`inv:${c.id}`);
     try { await api.respondInvite(c.id, accept); toast[accept ? "ok" : "info"](accept ? `You've joined "${c.name}".` : "Invite declined."); await load(); }
     catch (e) { toast.danger(e instanceof Error ? e.message : "Couldn't respond."); }
@@ -103,9 +106,9 @@ export default function Carpools() {
               <Card>
                 <EmptyState
                   icon={Car}
-                  title={canDrive ? "No carpool yet" : "You're not in a carpool yet"}
-                  sub={canDrive ? "Pick a few neighbours on the map and create one — you drive, they ride along." : "Request a seat in a carpool near you; the organiser confirms and you're in."}
-                  action={<Button size="sm" variant="soft" icon={Compass} onClick={() => nav.tab("discover")}>{canDrive ? "Find neighbours" : "Find a carpool"}</Button>}
+                  title={isAddon ? "No family carpool yet" : canDrive ? "No carpool yet" : "You're not in a carpool yet"}
+                  sub={isAddon ? "Once the parent joins or creates a carpool, it appears here." : canDrive ? "Pick a few neighbours on the map and create one — you drive, they ride along." : "Request a seat in a carpool near you; the organiser confirms and you're in."}
+                  action={isAddon ? undefined : <Button size="sm" variant="soft" icon={Compass} onClick={() => nav.tab("discover")}>{canDrive ? "Find neighbours" : "Find a carpool"}</Button>}
                 />
               </Card>
             ) : (

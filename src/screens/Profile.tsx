@@ -1,4 +1,4 @@
-// Profile — who you are, then rows into Family, Car & documents, Trip
+// Profile — who you are, then rows into Family, Your car, Trip
 // history and Settings. Contact & home pin edit inline. Add-ons get a
 // view-only version that explains what they can do.
 import { useState } from "react";
@@ -101,7 +101,7 @@ export default function Profile() {
             <p className="font-semibold text-ink-900">You're linked to a family account</p>
             <p className="mt-1 text-pretty">
               {isDriver
-                ? "Once the family confirms you, you can share live GPS on their carpool trips. Keep your car and documents up to date below."
+                ? "Once the family confirms you, you can share live GPS on their carpool trips. Keep your car details up to date below."
                 : "You can follow the family's trips and alerts. Children, carpools and contact details are managed by the parent."}
             </p>
           </Card>
@@ -121,9 +121,8 @@ export default function Profile() {
             )}
             {(isDriver || (!isAddon && !isAdmin && u.can_drive !== false)) && (
               <ListRow
-                divider leading={<Tile icon={Car} />} title="Car & documents"
+                divider leading={<Tile icon={Car} />} title="Your car"
                 sub={u.vehicle?.plate ? `${u.vehicle.make_model ?? "Car"} · ${u.vehicle.plate}` : "Add your car so riders recognise it"}
-                trailing={u.documents?.length ? <Pill size="sm" tone={u.documents.every((d) => d.status === "verified") ? "ok" : "neutral"}>{u.documents.filter((d) => d.status === "verified").length}/{u.documents.length} verified</Pill> : undefined}
                 onClick={() => nav.go({ name: "car" })}
               />
             )}

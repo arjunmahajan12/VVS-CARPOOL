@@ -1,11 +1,9 @@
-// The one map component screens use. Picks the provider from the build:
-// Mappls when a key is configured (and only Mappls), Leaflet for keyless demo.
-import { useMapProvider } from "../../lib/mapProvider";
+// The one map component screens use. Mappls only — there is no other provider.
+// Without VITE_MAPPLS_KEY at build time the map shows an explicit configuration
+// error instead of silently swapping to another map.
 import type { MapProps } from "./mapTypes";
 import MapplsMap from "./MapplsMap";
-import LeafletMap from "./LeafletMap";
 
 export default function MapView(props: MapProps) {
-  const provider = useMapProvider();
-  return provider === "mappls" ? <MapplsMap {...props} /> : <LeafletMap {...props} />;
+  return <MapplsMap {...props} />;
 }

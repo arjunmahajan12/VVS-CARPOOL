@@ -141,6 +141,12 @@ const latestTncVersion = () => Math.max(0, ...tnc.map((t) => t.version));
 const school = (): School => ({ name: settings.school_name, lat: settings.school_lat, lng: settings.school_lng });
 
 function me(): UserRow { const u = byId(currentId); if (!u) throw new Error("Sign in first"); return u; }
+// Chat is private to the carpool: joined households (incl. their add-ons) and the school admin.
+function requireChatMember(carpoolId: string, what: string) {
+  const m = me(); const a = anchorOf(m);
+  const isMember = members.some((x) => x.carpool_id === carpoolId && x.status === "joined" && x.parent_id === a);
+  if (!isMember && m.role !== "admin") throw new Error(`Only members of this carpool can ${what}.`);
+}
 function anchorOf(u: UserRow): string { return u.role === "addon" && u.parent_owner_id ? u.parent_owner_id : u.id; }
 function anchor(): string { return anchorOf(me()); }
 const isAdmin = () => byId(currentId)?.role === "admin";
@@ -230,7 +236,7 @@ function profileOut(u: UserRow): Profile {
 }
 function memberOut(m: MemberRow): Member {
   const p = byId(m.parent_id);
-  return { parent_id: m.parent_id, parent_name: p?.name ?? "", phone: p?.phone ?? null, colony: p?.colony ?? null,
+  return { parent_id: m.parent_id, parent_name: p?.name ?? "", phone: p?.phone ?? null, colony: p?.colony ?? null, can_drive: p?.can_drive !== false,
     existing_carpool: !!p?.existing_carpool, role: m.role, status: m.status, home_lat: p?.home_lat ?? null, home_lng: p?.home_lng ?? null,
     child_id: p?.children[0]?.id, child_name: p?.children[0]?.name };
 }
@@ -258,9 +264,10 @@ const childCount = (cid: string) => members.filter((m) => m.carpool_id === cid &
 
 function carpoolOut(cp: CarpoolRow, withRide = true): Carpool {
   const ms = members.filter((m) => m.carpool_id === cp.id).map(memberOut);
-  const mine = ms.find((m) => m.parent_id === currentId);
-  const active = withRide ? activeRideOf(cp.id) : null;
   const viewer = byId(currentId);
+  // membership is per household: an add-on shares their parent's status
+  const mine = ms.find((m) => m.parent_id === (viewer ? anchorOf(viewer) : currentId));
+  const active = withRide ? activeRideOf(cp.id) : null;
   return {
     id: cp.id, name: cp.name, creator_id: cp.creator_id, creator_name: byId(cp.creator_id)?.name,
     driver_name: cp.driver_name, driver_phone: cp.driver_phone, driver_vehicle: cp.driver_vehicle,
@@ -289,7 +296,7 @@ function rideOut(r: RideRow): Ride {
   const cp = carpoolById(r.carpool_id);
   return {
     id: r.id, carpool_id: r.carpool_id, driver_name: r.driver_name, driver_user_id: r.driver_user_id,
-    driver_phone: r.driver_phone, driver_vehicle: r.driver_vehicle, order: [...r.order], status: r.status,
+    driver_phone: (r.driver_user_id && byId(r.driver_user_id)?.phone) || r.driver_phone, driver_vehicle: r.driver_vehicle, order: [...r.order], status: r.status,
     direction: r.direction, origin_lat: r.origin_lat, origin_lng: r.origin_lng,
     started_at: r.started_at, ended_at: r.ended_at, last_lat: r.last_lat, last_lng: r.last_lng,
     last_heading: r.last_heading, last_update: r.last_update,
@@ -442,6 +449,16 @@ function startRideInternal(cid: string, driverUserId: string | null | undefined,
   ord.forEach((cidKid) => {
     const f = findChild(cidKid);
     if (f && f.parent.home_lat != null && f.parent.home_lng != null) mkStop(toSchool ? "pickup" : "drop", f.parent.home_lat, f.parent.home_lng, f.child.name, cidKid);
+  });
+  // Absent children still get a stop row, marked "skipped", so the rail shows "Absent"
+  // (SPEC §3) — never routed, never ETA'd, never counted as missed. Mirrors the SQL.
+  members.filter((m) => m.carpool_id === cid && m.status === "joined").forEach((m) => {
+    const parent = byId(m.parent_id); if (!parent || parent.home_lat == null || parent.home_lng == null) return;
+    if (!toSchool && parent.id === fam) return;
+    parent.children.filter((c) => isAbsent(cid, c.id)).forEach((c) => {
+      mkStop(toSchool ? "pickup" : "drop", parent.home_lat as number, parent.home_lng as number, c.name, c.id);
+      stops[stops.length - 1].status = "skipped";
+    });
   });
   if (toSchool) mkStop("school", sch.lat, sch.lng, sch.name);
   else if (family?.home_lat != null && family.home_lng != null) mkStop("home_end", family.home_lat, family.home_lng, `${family.name}'s home`);
@@ -715,7 +732,7 @@ function seed() {
   FAMILIES.forEach((f) => {
     const u = mkUser({ id: f.id, name: f.name, email: f.email, phone: f.phone, colony: f.colony, pincode: f.pincode, address: f.address,
       home_lat: SCHOOL.lat + f.dLat, home_lng: SCHOOL.lng + f.dLng, existing_carpool: f.existing_carpool, can_drive: f.can_drive,
-      status: f.status, tnc_version: 1 });
+      status: f.status, tnc_version: 1, vehicle: f.vehicle ?? null });
     f.kids.forEach((k) => u.children.push({ id: uid(), name: k.name, class_level: k.class_level, gender: k.gender,
       allergies: k.allergies ?? null, emergency_name: k.emergency_name ?? null, emergency_phone: k.emergency_phone ?? null, photo_url: null }));
   });
@@ -814,6 +831,9 @@ function resolveSignIn(email: string): SignInResult {
 }
 
 export const demoBackend: Backend = {
+  // ---- pre-login ----
+  publicConfig: async () => ({ demo_logins: true, school_name: SCHOOL.name }),
+
   // ---- auth / profile ----
   signIn: async (email) => wait(resolveSignIn(email)),
   signUp: async (email) => wait(resolveSignIn(email)),
@@ -928,7 +948,7 @@ export const demoBackend: Backend = {
       const hkm = distKm(m.home_lat, m.home_lng, p.home_lat, p.home_lng);
       const rkm = p.home_lat != null && p.home_lng != null && m.home_lat != null && m.home_lng != null
         ? distRouteKm(p.home_lat, p.home_lng, m.home_lat, m.home_lng, sch.lat, sch.lng) : null;
-      return { id: p.id, name: p.name, colony: p.colony, pincode: p.pincode, phone: null, home_lat: jit(p.home_lat), home_lng: jit(p.home_lng),
+      return { id: p.id, name: p.name, colony: p.colony, pincode: p.pincode, phone: p.phone, home_lat: jit(p.home_lat), home_lng: jit(p.home_lng),
         existing_carpool: p.existing_carpool, children: p.children.map((c) => ({ name: c.name, class_level: c.class_level, gender: c.gender ?? null })),
         distance_km: roundN(hkm, 2), distance_from_route_km: roundN(rkm, 2) };
     });
@@ -960,9 +980,9 @@ export const demoBackend: Backend = {
 
   // ---- carpools ----
   myCarpools: async () => {
-    const m = me(); const ids = new Set<string>();
-    carpools.filter((c) => c.creator_id === m.id).forEach((c) => ids.add(c.id));
-    members.filter((x) => x.parent_id === m.id).forEach((x) => ids.add(x.carpool_id));
+    const m = me(); const a = anchorOf(m); const ids = new Set<string>();
+    carpools.filter((c) => c.creator_id === a).forEach((c) => ids.add(c.id));
+    members.filter((x) => x.parent_id === a).forEach((x) => ids.add(x.carpool_id));
     return wait([...ids].map(carpoolById).filter((c): c is CarpoolRow => !!c).map((c) => carpoolOut(c)));
   },
   getCarpool: async (carpoolId) => {
@@ -975,6 +995,7 @@ export const demoBackend: Backend = {
   },
   createCarpool: async (data) => {
     const m = me(); requireApproved();
+    if (m.role !== "parent") throw new Error("Only a parent can create a carpool.");
     if (m.can_drive === false) throw new Error("Only a parent with a car can create a carpool — you can join one instead from the Find tab.");
     if (!data.name || !data.name.trim()) throw new Error("Give the carpool a name.");
     const cp: CarpoolRow = { id: uid(), name: data.name.trim(), creator_id: m.id, driver_name: null, driver_phone: null, driver_vehicle: null,
@@ -1026,11 +1047,22 @@ export const demoBackend: Backend = {
   },
   leaveCarpool: async (carpoolId) => {
     const m = me(); const cp = carpoolById(carpoolId);
+    if (activeRideOf(carpoolId)) throw new Error("End the live trip before leaving this carpool.");
     const mem = members.find((x) => x.carpool_id === carpoolId && x.parent_id === m.id); if (mem) mem.status = "left";
     if (cp && cp.creator_id === m.id) {
-      const next = members.find((x) => x.carpool_id === carpoolId && x.status === "joined" && x.parent_id !== m.id);
-      if (next) { cp.creator_id = next.parent_id; next.role = "creator"; }
-      else { deleteCarpoolRows(carpoolId); }
+      // ONE carpool = ONE driving family: hand over only to a family that has a car.
+      const next = members.find((x) => x.carpool_id === carpoolId && x.status === "joined" && x.parent_id !== m.id && byId(x.parent_id)?.can_drive !== false);
+      if (next) {
+        cp.creator_id = next.parent_id; next.role = "creator"; if (mem) mem.role = "member";
+        cp.driver_name = null; cp.driver_phone = null; cp.driver_vehicle = null;
+        notify(next.parent_id, `You now organise "${cp.name}"`, `${m.name} left — your household drives its trips from now on.`, "info");
+        audience(carpoolId).filter((u) => u !== next.parent_id && u !== m.id).forEach((u) => notify(u, "New organiser", `${m.name} left "${cp.name}"; ${byId(next.parent_id)?.name} now organises it.`, "info"));
+      } else {
+        audience(carpoolId).filter((u) => u !== m.id).forEach((u) => notify(u, "Carpool closed", `"${cp.name}" closed — the organiser left and no other family has a car to drive it.`, "info"));
+        deleteCarpoolRows(carpoolId);
+      }
+    } else if (cp) {
+      audience(carpoolId).filter((u) => u !== m.id).forEach((u) => notify(u, "A family left", `${m.name} left "${cp.name}".`, "info"));
     }
     return wait(OK);
   },
@@ -1143,9 +1175,11 @@ export const demoBackend: Backend = {
   },
 
   // ---- chat / notifications / push ----
-  getChat: async (carpoolId) => wait(chats.filter((c) => c.carpool_id === carpoolId).map((c) => ({ ...c }))),
+  getChat: async (carpoolId) => { requireChatMember(carpoolId, "read its chat"); return wait(chats.filter((c) => c.carpool_id === carpoolId).map((c) => ({ ...c }))); },
   sendChat: async (carpoolId, body) => {
-    const m = me();
+    const m = me(); requireChatMember(carpoolId, "post in its chat");
+    if (!body || !body.trim()) throw new Error("Message is empty.");
+    body = body.slice(0, 1000);
     const msg: ChatMessage = { id: uid(), carpool_id: carpoolId, sender_id: m.id, sender_name: m.name, body, created_at: nowISO() };
     chats.push(msg); emit("chat:" + carpoolId, msg);
     audience(carpoolId).filter((u) => u !== m.id).forEach((u) => notify(u, "New message", `${m.name}: ${body.slice(0, 40)}`, "chat"));

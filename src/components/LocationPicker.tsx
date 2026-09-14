@@ -113,7 +113,7 @@ export default function LocationPicker({
         <button
           type="button" onClick={locateMe} disabled={locating}
           className={`inline-flex h-11 shrink-0 items-center gap-2 rounded-[14px] px-3.5 text-[13px] font-semibold transition active:scale-[0.98] disabled:opacity-60 ${HAS_MAPPLS ? "" : "flex-1 justify-center"}`}
-          style={{ background: "color-mix(in srgb, var(--color-primary-600, #1F4B99) 12%, transparent)", color: "var(--color-primary-700, #173B7A)" }}
+          style={{ background: "var(--color-primary-soft, #E8EEF9)", color: "var(--color-primary-soft-ink, #173B7A)" }}
         >
           {locating
             ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />

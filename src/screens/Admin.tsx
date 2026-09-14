@@ -166,6 +166,7 @@ function AdminCarpools() {
   const [list, setList] = useState<Carpool[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
   const load = useCallback(async () => {
     try { setList(await api.adminCarpools()); setError(null); }
     catch (e) { setError(errMsg(e, "Couldn't load carpools.")); setList((l) => l ?? []); }
@@ -193,6 +194,10 @@ function AdminCarpools() {
               {c.stats && c.stats.trips > 0 && <p className="tnum mt-0.5 text-xs text-ink-500">{c.stats.trips} trips · {pct(c.stats.on_time_pct)}% on time · {c.stats.missed_rate != null ? Math.round(c.stats.missed_rate * 100) : 0}% missed</p>}
             </div>
           </div>
+          <Button variant={open === c.id ? "soft" : "ghost"} icon={Users} onClick={() => setOpen(open === c.id ? null : c.id)} full>
+            {open === c.id ? "Hide families & children" : `Families & children (${c.joined.length} · ${(c.riders ?? []).length})`}
+          </Button>
+          {open === c.id && <CarpoolRoster c={c} />}
           {c.active_ride && (
             <div className="grid grid-cols-2 gap-2 *:min-w-0">
               <Button variant="soft" onClick={() => nav.go({ name: "trip", rideId: c.active_ride!.id })}>Watch live</Button>
@@ -202,6 +207,48 @@ function AdminCarpools() {
         </Card>
       ))}
     </>
+  );
+}
+
+/** Every family in a carpool with their contact details and children — the
+ *  school's view for verification and emergencies. */
+function CarpoolRoster({ c }: { c: Carpool }) {
+  const riders = c.riders ?? [];
+  const families = c.members.filter((m) => m.status === "joined" || m.status === "invited" || m.status === "requested");
+  return (
+    <div className="grid gap-2 rounded-md bg-bg p-3 *:min-w-0">
+      {families.map((m) => {
+        const kids = riders.filter((r) => r.parent_id === m.parent_id);
+        return (
+          <div key={m.parent_id} className="flex items-start gap-3">
+            <Avatar name={m.parent_name} size="sm" />
+            <div className="min-w-0 flex-1 text-sm">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <span className="font-semibold text-ink-900">{m.parent_name}</span>
+                {m.role === "creator" && <Pill size="sm" tone="primary">Organiser</Pill>}
+                {m.status !== "joined" && <Pill size="sm" tone="neutral">{m.status === "invited" ? "Invited" : "Requested"}</Pill>}
+              </div>
+              <p className="tnum text-xs text-ink-500">
+                {m.phone ? <a href={`tel:${m.phone}`} className="font-medium text-primary">{m.phone}</a> : "no phone"}{m.colony ? ` · ${m.colony}` : ""}
+              </p>
+              {kids.length > 0 ? (
+                <ul className="m-0 mt-1 grid list-none gap-0.5 p-0 text-xs text-ink-700">
+                  {kids.map((k) => (
+                    <li key={k.child_id} className="flex flex-wrap items-center gap-x-2">
+                      <span>{k.child_name} · {classLabel(k.class_level)}{k.gender ? ` · ${k.gender === "female" ? "girl" : "boy"}` : ""}</span>
+                      {k.absent && <Pill size="sm" tone="neutral">Absent today</Pill>}
+                      {k.allergies && <span className="text-danger">⚠ {k.allergies}</span>}
+                      {k.emergency_phone && <span className="text-ink-500">Emergency: {k.emergency_phone}</span>}
+                    </li>
+                  ))}
+                </ul>
+              ) : m.status === "joined" ? <p className="mt-1 text-xs text-ink-500">No children on file</p> : null}
+            </div>
+          </div>
+        );
+      })}
+      {c.driver_name && <p className="tnum text-xs text-ink-500">Driver on file: {c.driver_name}{c.driver_phone ? ` · ${c.driver_phone}` : ""}{c.driver_vehicle ? ` · ${c.driver_vehicle}` : ""}</p>}
+    </div>
   );
 }
 

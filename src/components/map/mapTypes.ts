@@ -1,4 +1,4 @@
-// Map contract v2 — shared by the Mappls (live) and Leaflet (keyless demo)
+// Map contract v2 — for the Mappls map
 // implementations so screens are provider-agnostic. See SPEC.md §5.
 import type { StopStatus, StopKind } from "../../lib/types";
 

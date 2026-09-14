@@ -48,13 +48,14 @@ export function TabBar<K extends string = string>({ tabs, active, onChange, fixe
             <li key={t.key} className="min-w-0">
               <button
                 type="button" onClick={() => onChange(t.key)} aria-current={on ? "page" : undefined}
+                aria-label={typeof t.badge === "number" && t.badge > 0 ? `${t.label}, ${t.badge} new` : t.badge === true ? `${t.label}, new` : t.label}
                 className={cn("group relative flex h-full w-full flex-col items-center justify-center gap-1 rounded-xs transition-colors", on ? "text-primary" : "text-ink-500 hover:text-ink-700")}
               >
                 <span className={cn("relative grid h-8 w-12 place-items-center rounded-full transition-[background-color,transform] duration-200", on && "bg-primary-soft")}>
                   <Icon size={22} strokeWidth={on ? 2.5 : 2} aria-hidden />
                   {t.badge ? (
                     typeof t.badge === "number" ? (
-                      <span className="tnum absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] font-bold leading-none text-white ring-2 ring-card">{t.badge > 99 ? "99+" : t.badge}</span>
+                      <span aria-hidden className="tnum absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] font-bold leading-none text-white ring-2 ring-card">{t.badge > 99 ? "99+" : t.badge}</span>
                     ) : (
                       <span className="absolute right-2 top-0.5 h-2 w-2 rounded-full bg-accent ring-2 ring-card" />
                     )

@@ -13,6 +13,7 @@ import { ACCENT, PRIMARY, SLATE, WHITE, calloutIcon, carIcon, clusterIcon, etaCh
 import { boundsOf, clusterPins, fitView, frameSignature, framePoints, padBoundsKm, safePath, type LatLng } from "./mapUtils";
 import { useCarGlide } from "./useCarGlide";
 import { MapError, MapSkeleton } from "./MapChrome";
+import { HAS_MAPPLS } from "../../lib/mapProvider";
 import { MAPPLS_CLASS as CLASS, loadMappls } from "../../lib/mapProvider";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -90,7 +91,7 @@ export default function MapplsMap(props: MapProps) {
     const c0 = num(center?.[0]) && num(center?.[1]) ? center : VVS;
     loadMappls().then((ok) => {
       if (cancelled) return;
-      if (!ok) { setFailed("The Mappls SDK didn't load."); return; }
+      if (!ok) { setFailed(HAS_MAPPLS ? "The Mappls SDK didn't load." : "Map key missing — set VITE_MAPPLS_KEY before building the app."); return; }
       if (!document.getElementById(id)) { setFailed("Map container went missing."); return; }
       let m: Layer = null;
       try {
@@ -284,7 +285,7 @@ export default function MapplsMap(props: MapProps) {
     <div ref={holder} className={`relative overflow-hidden ${className || "h-64 w-full"}`}>
       <div id={id} className="absolute inset-0 z-0" aria-label="Map" />
       <MapSkeleton visible={!ready && !failed} insetBottom={padBottom} insetTop={padTop} />
-      {failed && <MapError onRetry={() => setAttempt((n) => n + 1)} insetBottom={padBottom} insetTop={padTop} />}
+      {failed && <MapError onRetry={() => setAttempt((n) => n + 1)} detail={failed} insetBottom={padBottom} insetTop={padTop} />}
     </div>
   );
 }
