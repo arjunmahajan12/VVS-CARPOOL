@@ -65,7 +65,7 @@ End-to-end flows (multi-role, in a headless browser against `npm run build` + `n
    ```sql
    update profiles set role='admin', status='approved' where email='YOUR_EMAIL';
    ```
-4. **Optional — demo accounts on the live site:** run `supabase/seed_demo.sql` in the SQL editor. It creates the seeded families (Asha, Vikram, Neha, Priya, the driver, Dadi, the admin…) as real logins with password `demo1234`, and switches on the one-tap "Demo quick login" panel on the sign-in screen. Demo accounts can also run the simulated drive. Re-run to reset them; delete their rows to remove them.
+4. **Optional — demo accounts on the live site:** run `supabase/seed_demo.sql` in the SQL editor. It creates the seeded families (Asha, Vikram, Neha, Priya, the driver, Relatives, the admin…) as real logins with password `demo1234`, and switches on the one-tap "Demo quick login" panel on the sign-in screen. Demo accounts can also run the simulated drive. Re-run to reset them; delete their rows to remove them.
 5. Whitelist your origin(s) in the **Mappls** console for `VITE_MAPPLS_KEY` (the site's exact domain, e.g. `vvs-carpool-ch2.pages.dev`).
 6. Build with the three keys set, and deploy `dist/` to Cloudflare Pages (or any static host).
 7. **Uploading through the GitHub web page?** It never deletes files — see `DELETED_FILES.txt` for the files to remove by hand after each upload.

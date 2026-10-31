@@ -65,7 +65,7 @@ export const ADDONS: SeedAddon[] = [
       { id: "d2", type: "insurance", number: "INS-88213947", expiry: "2027-03-15", status: "verified" },
       { id: "d3", type: "puc", number: "PUC-5521", expiry: "2026-12-01", status: "verified" },
     ], driver_status: "verified" },
-  { id: "dadi1", owner: "asha", name: "Dadi", email: "dadi@demo.in", relation: "grandparent" },
+  { id: "dadi1", owner: "asha", name: "Relatives", email: "dadi@demo.in", relation: "grandparent" },
   { id: "driver2", owner: "vikram", name: "Suresh Yadav", email: "suresh@demo.in", relation: "driver", phone: "+91 98220 55667",
     vehicle: { make_model: "Toyota Innova", color: "White", plate: "DL 8C XY 7788", seats: 7 },
     documents: [

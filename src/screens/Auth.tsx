@@ -24,7 +24,7 @@ const QUICK: { group: string; icon: typeof UserRound; tone: string; items: Quick
   },
   { group: "School admin", icon: ShieldCheck, tone: "bg-accent-soft text-accent-soft-ink", items: [{ email: "admin@vasantvalley.demo", name: "VVS School Admin", sub: "Verify, incidents, settings" }] },
   { group: "Family driver", icon: Car, tone: "bg-ok-soft text-ok-ink", items: [{ email: "driver@demo.in", name: "Ramesh Kumar", sub: "Drives for the Mehta family" }] },
-  { group: "Add-on", icon: UserRound, tone: "bg-info-soft text-info-ink", items: [{ email: "dadi@demo.in", name: "Dadi", sub: "Grandparent · view-only" }] },
+  { group: "Add-on", icon: UserRound, tone: "bg-info-soft text-info-ink", items: [{ email: "dadi@demo.in", name: "Relatives", sub: "Grandparent · view-only" }] },
 ];
 
 export default function Auth() {

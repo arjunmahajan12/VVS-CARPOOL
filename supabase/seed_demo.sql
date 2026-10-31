@@ -87,12 +87,12 @@ begin
   -- ---- family add-ons (invite + linked profile) ---------------------------
   insert into addon_invites(parent_id,name,email,relation) values
    (u_asha,  'Ramesh Kumar','driver@demo.in','driver'),
-   (u_asha,  'Dadi',        'dadi@demo.in',  'grandparent'),
+   (u_asha,  'Relatives',   'dadi@demo.in',  'grandparent'),
    (u_vikram,'Suresh Yadav','suresh@demo.in','driver');
   insert into profiles(id,role,name,email,phone,parent_owner_id,relation,status,tnc_version,vehicle,driver_status) values
    (u_ramesh,'addon','Ramesh Kumar','driver@demo.in','+91 98700 12345',u_asha,  'driver','approved',1,
       '{"make_model":"Maruti Ertiga","color":"Silver","plate":"DL 3C AB 1234","seats":6}'::jsonb,'verified'),
-   (u_dadi,  'addon','Dadi',        'dadi@demo.in',  null,             u_asha,  'grandparent','approved',1,null,null),
+   (u_dadi,  'addon','Relatives',   'dadi@demo.in',  null,             u_asha,  'grandparent','approved',1,null,null),
    (u_suresh,'addon','Suresh Yadav','suresh@demo.in','+91 98220 55667',u_vikram,'driver','approved',1,
       '{"make_model":"Toyota Innova","color":"White","plate":"DL 8C XY 7788","seats":7}'::jsonb,'verified');
 
