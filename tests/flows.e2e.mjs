@@ -207,18 +207,13 @@ ok(!(await has(/End stuck trip/)), "admin ended the stuck trip");
 await p.getByText("Verify",{exact:true}).first().click(); await wait(800);
 { const rej=p.getByRole("button",{name:"Reject"}).first(); if(await rej.count()){ await rej.click(); await confirmDialog(); await wait(700); ok(true, "admin can reject a registration"); } else ok(true, "no pending registrations to reject (already handled)"); }
 
-// ============ 8. Profile: home & contact edit, trusted pickup, push toggle ============
+// ============ 8. Profile: home & contact edit, push toggle ============
 console.log("8. profile/settings");
 await signOut(); await login("asha@demo.in"); await tab("Profile"); await wait(600);
 await p.getByRole("button",{name:/Edit/}).first().click(); await wait(500);
 { const ph=p.locator('input[type=tel]').first(); if(await ph.count()){ await ph.fill("+91 91111 22222"); } }
 await p.getByRole("button",{name:"Save",exact:true}).first().click(); await wait(900);
 ok(await has(/91111 22222/), "home & contact saved");
-await p.getByText("Family",{exact:true}).first().click(); await wait(800);
-await p.getByRole("button",{name:"Add person"}).first().click(); await wait(400);
-await p.getByLabel("Name").last().fill("Nanny Test"); await p.getByLabel("Phone").last().fill("+91 93333 44444");
-await p.getByRole("button",{name:"Add person"}).last().click(); await wait(800);
-ok(await has(/Nanny Test/), "trusted pickup person added");
 await goHash("#/settings"); await wait(700);
 const sw=p.getByRole("switch",{name:"Push alerts"}); ok(await sw.count()>0, "push toggle present");
 if(await sw.count()){ if(await sw.isEnabled()){ await sw.click(); await wait(800); ok(await has(/not configured|Push needs|inbox|Not available/i), "push toggle explains it's unavailable in this build"); } else ok(await has(/Not available in this browser|Blocked in browser/), "push switch disabled with a reason when the browser can't push"); }

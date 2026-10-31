@@ -213,7 +213,7 @@ ride-hailing clone. Map-first screens; calm cards elsewhere.
 | **Live trip** | Full-bleed map: car, route + travelled, numbered status stops, fences, next-stop callout. Sheet: **stop rail** (vertical timeline with per-stop ETA/delay), driver mode (GPS share toggle, hands-free copy, end trip) vs parent mode (my child's status, "Didn't board?" correction, call driver). Simulate-trip control in demo mode (with stop pauses). |
 | **Trip history** | List with on-time badge, duration, missed count; tap → **Replay**: map scrubber over the ping trail with events + stops. |
 | **Notifications** | Inbox grouped by day; kinds coloured. |
-| **Profile** | Family (children CRUD, add-ons + driver confirm), car & documents, trusted pickups, push toggle, theme, terms, sign out. |
+| **Profile** | Family (children CRUD, add-ons + driver confirm), car & documents, push toggle, theme, terms, sign out. |
 | **Admin** | Dashboard (stats + punctuality analytics with sparklines), Verify, Carpools (end stuck trip), Incidents (anomalies + missed + off-route), Settings (school pin, **geofence & anomaly rules**, bell times, promote year), Notices + Terms. |
 
 ## 8. Realtime

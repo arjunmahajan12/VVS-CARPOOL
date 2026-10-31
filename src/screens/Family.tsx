@@ -1,5 +1,5 @@
 // Family — children (add / edit / remove), add-on logins (spouse, grandparent,
-// driver…) with driver confirmation, and trusted pickup persons.
+// driver…) with driver confirmation.
 import { useState, type FormEvent } from "react";
 import { ArrowLeft, Car, Mail, Pencil, Plus, ShieldCheck, Trash2, TriangleAlert, UserPlus, Users } from "lucide-react";
 import { useAuth } from "../context/auth";
@@ -59,9 +59,6 @@ export default function Family() {
   const [addonOpen, setAddonOpen] = useState(false);
   const [addon, setAddon] = useState({ name: "", email: "", relation: "spouse" });
   const [addonErr, setAddonErr] = useState<Record<string, string>>({});
-  const [trustedOpen, setTrustedOpen] = useState(false);
-  const [trusted, setTrusted] = useState({ name: "", phone: "" });
-  const [trustedErr, setTrustedErr] = useState<Record<string, string>>({});
 
   async function run(key: string, fn: () => Promise<unknown>, okMsg: string) {
     setBusy(key);
@@ -102,21 +99,6 @@ export default function Family() {
   async function confirmDriver(a: Addon, val: boolean) {
     if (val && !(await confirm({ title: `Confirm ${a.name} to drive?`, message: "They'll be able to start and drive your carpool's trips with live GPS. Only confirm someone you trust with the children.", confirmLabel: "Confirm driver", danger: false, icon: ShieldCheck }))) return;
     await run(`drv-${a.id}`, () => api.confirmDriver(a.id, val), val ? `${a.name} is confirmed to drive.` : `${a.name} can no longer drive trips.`);
-  }
-
-  async function saveTrusted(e: FormEvent) {
-    e.preventDefault();
-    const err: Record<string, string> = {};
-    if (!trusted.name.trim()) err.name = "Their name.";
-    if (!/^[+\d][\d\s-]{7,}$/.test(trusted.phone.trim())) err.phone = "A phone number the driver can call.";
-    setTrustedErr(err);
-    if (Object.keys(err).length) return;
-    const ok = await run("trusted", () => api.addTrusted({ name: trusted.name.trim(), phone: trusted.phone.trim() }), `${trusted.name.trim()} added as a trusted pickup.`);
-    if (ok) { setTrusted({ name: "", phone: "" }); setTrustedOpen(false); }
-  }
-  async function removeTrusted(id: string, name: string) {
-    if (!(await confirm({ title: `Remove ${name}?`, message: "The driver will no longer see them as approved to receive your child.", confirmLabel: "Remove" }))) return;
-    await run(`rm-${id}`, () => api.removeTrusted(id), `${name} removed.`);
   }
 
   const editing = typeof childMode === "object" ? u.children.find((c) => c.id === childMode.edit) : null;
@@ -207,38 +189,6 @@ export default function Family() {
                 <div className="flex gap-2">
                   <Button type="button" variant="ghost" onClick={() => setAddonOpen(false)}>Cancel</Button>
                   <Button type="submit" full loading={busy === "addon"}>Create invite</Button>
-                </div>
-              </form>
-            )}
-          </Card>
-        </section>
-
-        {/* Trusted pickups */}
-        <section>
-          <SectionTitle count={u.trusted?.length || undefined} sub="People allowed to receive your child at drop-off. The driver sees this list on every trip." action={!trustedOpen ? <Button size="sm" variant="soft" icon={Plus} onClick={() => setTrustedOpen(true)}>Add person</Button> : undefined}>Trusted pickups</SectionTitle>
-          <Card padding="none" className="mt-2 px-4">
-            {(u.trusted?.length ?? 0) === 0 && !trustedOpen && (
-              <EmptyState icon={ShieldCheck} title="Nobody listed" sub="Add a grandparent, neighbour or nanny who may collect your child if you're not home." />
-            )}
-            {(u.trusted ?? []).map((t) => (
-              <div key={t.id} className="flex items-center gap-3 border-b border-line py-3 last:border-b-0">
-                <Avatar name={t.name} size="md" tone="ok" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-base font-semibold text-ink-900">{t.name}</p>
-                  <p className="truncate text-sm text-ink-500 tnum">{t.phone}</p>
-                </div>
-                <IconButton icon={Trash2} label={`Remove ${t.name}`} size="sm" variant="danger" loading={busy === `rm-${t.id}`} onClick={() => void removeTrusted(t.id, t.name)} />
-              </div>
-            ))}
-            {trustedOpen && (
-              <form onSubmit={saveTrusted} className="anim-rise grid gap-3 py-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <Input label="Name" value={trusted.name} onChange={(e) => setTrusted((s) => ({ ...s, name: e.target.value }))} error={trustedErr.name} autoFocus />
-                  <Input label="Phone" type="tel" inputMode="tel" placeholder="+91…" value={trusted.phone} onChange={(e) => setTrusted((s) => ({ ...s, phone: e.target.value }))} error={trustedErr.phone} />
-                </div>
-                <div className="flex gap-2">
-                  <Button type="button" variant="ghost" onClick={() => setTrustedOpen(false)}>Cancel</Button>
-                  <Button type="submit" full loading={busy === "trusted"}>Add person</Button>
                 </div>
               </form>
             )}
