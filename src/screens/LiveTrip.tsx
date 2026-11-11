@@ -121,6 +121,9 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
   const next = nextOf(stops);
   const mapStops = useMemo<MapStop[]>(() => stops.map((s) => ({ id: s.id, seq: s.seq, lat: s.lat, lng: s.lng, kind: s.kind, status: s.status, label: s.label, sub: s.sub, etaMin: s.eta_min, isNext: next?.id === s.id })), [stops, next?.id]);
   const { travelled, ahead } = useMemo(() => splitRouteAtCar(route, car), [route, car]);
+  const mapCar = car && travelled.length > 1
+    ? { ...car, lat: travelled[travelled.length - 1][0], lng: travelled[travelled.length - 1][1] }
+    : car;
   const fences = useMemo<MapFence[]>(() => {
     if (!next || !settings) return [];
     const stopM = next.kind === "school" ? settings.school_gate_m : settings.fence_stop_m;
@@ -255,7 +258,7 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
       <div className="absolute inset-0">
         <MapView className="h-full w-full" center={center} zoom={15}
         stops={mapStops} route={ahead.length > 1 ? ahead : route} travelled={travelled.length > 1 ? travelled : null}
-        car={car} carEta={next?.eta_min ?? null} fences={fences} follow={follow && !!car} traffic={traffic}
+        car={mapCar} carEta={next?.eta_min ?? null} fences={fences} follow={follow && !!mapCar} traffic={traffic}
         padding={{ bottom: sheet.inset, top: 72 }}
         onStopTap={(id) => { const s = stops.find((x) => x.id === id); if (s) toast({ title: s.label, message: `${s.sub ?? ""}${s.eta_min != null && !TERMINAL.has(s.status) ? ` · ${formatEta(s.eta_min)}` : ""}`.replace(/^ · /, "") }); }}
       />
