@@ -236,7 +236,7 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
       if (!TERMINAL.has(s.status) && s.kind === "pickup" && rs === "waiting") {
         trailing = <Button size="sm" variant="soft" disabled={s.status !== "stopped"} loading={busy === s.id} onClick={() => markBoarded(s)}>Boarded</Button>;
       } else if (!TERMINAL.has(s.status) && s.kind === "drop" && rs === "boarded") {
-        trailing = <Button size="sm" variant="soft" loading={busy === s.id} onClick={() => markDropped(s)}>Dropped</Button>;
+        trailing = <Button size="sm" variant="soft" disabled={s.status !== "stopped"} loading={busy === s.id} onClick={() => markDropped(s)}>Dropped</Button>;
       } else if (s.kind === "school" && toSchool && riders.some((r) => r.status === "boarded")) {
         const atSchool = !!car && !!settings && haversineKm(car.lat, car.lng, s.lat, s.lng) * 1000 <= settings.school_gate_m;
         trailing = <Button size="sm" variant="soft" disabled={!atSchool} loading={busy === "school"} onClick={markReachedSchool}>At school</Button>;
