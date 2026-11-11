@@ -4,6 +4,7 @@
 //   npx tsx logic-test.ts   →   === LOGIC: N passed, 0 failed ===
 import { demoBackend as api } from "./src/lib/demo";
 import { subscriberCount } from "./src/lib/bus";
+import { optimalOrder } from "./src/lib/optimize";
 import type { Stop, Notification, ChatMessage, RideEvent } from "./src/lib/types";
 
 interface Hooks { __VVS_DWELL_MS?: number; __VVS_NOW?: number; __VVS_LATENCY_MS?: number; }
@@ -57,10 +58,25 @@ async function run() {
   ok(cp1.riders?.length === 2, "cp1 has 2 riders (Riya + Kabir)");
   const riya = cp1.riders!.find((r) => r.child_name === "Riya Mehta")!;
   const kabirId = cp1.riders!.find((r) => r.child_name === "Kabir Gupta")!.child_id;
+  const routeFromNeha = optimalOrder([
+    { id: riya.child_id, name: riya.child_name, ...ashaHome },
+    { id: kabirId, name: "Kabir Gupta", ...nehaHome },
+  ], nehaHome, SCH, null);
+  ok(routeFromNeha[0].id === kabirId, "school-run ordering starts from the initiating member's location");
+  const routeHome = optimalOrder([
+    { id: "near-school", name: "Near school", lat: 1, lng: 0 },
+    { id: "near-end", name: "Near organiser", lat: 2, lng: 0 },
+  ], { lat: 0, lng: 0 }, { lat: 3, lng: 0 }, [
+    [0, 1, 2, 0],
+    [1, 0, 1, 1],
+    [2, 1, 0, 100],
+    [0, 1, 100, 0],
+  ]);
+  ok(routeHome[0].id === "near-end", "home-run ordering accounts for the organiser's fixed final stop");
   ok(cp1.is_org_household === true && cp1.is_creator === true, "organiser sees is_org_household + is_creator");
   ok(!!cp1.stats && typeof cp1.stats.trips === "number" && cp1.stats.trips > 0, "getCarpool includes stats with seeded trips");
 
-  // --- Start a trip: organiser anchors route, NOBODY auto-boarded ---
+  // --- Start a trip: provided origin determines route order, NOBODY auto-boarded ---
   const stopEvents: Stop[][] = []; const locs: number[] = []; let endedSignal = 0;
   await as("neha@demo.in");
   const ride = await api.startRide("cp1", "neha", null, "to_school", ashaHome.lat, ashaHome.lng);
@@ -71,7 +87,7 @@ async function run() {
   ok(ride.status === "active", "ride started");
   ok(ride.driver_user_id === "neha", "any joined member can start and becomes the trip controller");
   ok(ride.direction === "to_school" && ride.origin_lat != null, "trip stores its own direction + origin");
-  ok(ride.order?.[0] === riya.child_id, "organiser's child is the FIRST routed stop");
+  ok(ride.order?.[0] === riya.child_id, "the pickup nearest the route origin is first");
   ok(ride.order?.length === 2, "route covers all travelling children");
   let c = await api.getCarpool("cp1");
   ok(c.riders!.find((r) => r.child_name === "Riya Mehta")!.status === "waiting", "nobody is auto-boarded at start");
@@ -84,13 +100,13 @@ async function run() {
 
   // --- v8: persisted stops — kinds, order, planned ETAs ---
   const s0 = ride.stops ?? [];
-  ok(s0.map((s) => s.kind).join(",") === "pickup,pickup,school", "school run stops = pickups (organiser first) then the gate, got " + s0.map((s) => s.kind).join(","));
+  ok(s0.map((s) => s.kind).join(",") === "pickup,pickup,school", "school run stops = ordered pickups then the gate, got " + s0.map((s) => s.kind).join(","));
   ok(s0.every((s, i) => s.seq === i + 1), "stops carry 1-based seq");
   ok(s0[0].child_id === riya.child_id && s0[1].child_id === kabirId, "stop order follows the route order");
   ok(s0.every((s) => s.status === "pending"), "all stops start pending");
   ok(s0.every((s) => typeof s.planned_eta_min === "number" && isoRe.test(s.planned_at ?? "")), "planned ETA + planned_at fixed at start");
   ok(s0.every((s, i) => i === 0 || (s.planned_eta_min ?? 0) >= (s0[i - 1].planned_eta_min ?? 0)), "planned ETAs are cumulative along the route");
-  ok(s0[0].planned_eta_min === 0, "origin = organiser's home → first stop planned at 0 min");
+  ok(s0[0].planned_eta_min === 0, "the route origin is the first stop's home");
   ok(s0.every((s) => typeof s.eta_min === "number"), "live ETA seeded for every remaining stop at start");
   ok(s0[0].sub === "Asha Mehta · Vasant Kunj B-6" && s0[0].parent_id === "asha" && s0[0].child_name === "Riya Mehta", "pickup stop carries sub / parent_id / child_name");
   ok(s0[2].sub === "School gate" && s0[2].child_id == null && s0[2].label.includes("Vasant Valley"), "school stop has no child, sub 'School gate'");
@@ -193,6 +209,7 @@ async function run() {
   // --- Home run: stop at the gate boards everyone; ends at organiser home ---
   const back = await api.startRide("cp1", "asha", null, "from_school");
   ok(back.direction === "from_school", "explicit home run stored");
+  ok(back.origin_lat === SCH.lat && back.origin_lng === SCH.lng, "home run starts from the school gate");
   const hs = back.stops ?? [];
   // organiser's own children are not drop stops on a home run — they ride to home_end
   ok(hs.map((s) => s.kind).join(",") === "school,drop,home_end", "home run stops = gate, drops (others), home_end, got " + hs.map((s) => s.kind).join(","));

@@ -1,6 +1,6 @@
 // Carpool detail — two routes, chosen explicitly (never by the clock):
-// before 11:00 IST it's the school run, organiser's home first → other homes
-// → school; after, school → drops → organiser's home) with numbered stops,
+// the school run is starter's home → all homes → school; the home run is
+// school → drops → organiser's home, with numbered stops,
 // and a sheet with the live banner, punctuality stats, riders + absences,
 // members, chat, and carpool controls (start / delete).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -20,7 +20,7 @@ import { BottomSheet, MapView, SheetHeader, VVS, useSheetInset, type MapStop, ty
 interface Preview { stops: MapStop[]; route: [number, number][]; km: number | null; min: number | null; road: boolean }
 
 /** Group riders into one stop per household, ordered for today's direction. */
-function planStops(c: Carpool, school: School, direction: "to_school" | "from_school"): MapStop[] {
+function planStops(c: Carpool, school: School, direction: "to_school" | "from_school", starterHome: { lat: number; lng: number } | null): MapStop[] {
   const riders = c.riders ?? [];
   const byParent = new Map<string, Rider[]>();
   riders.forEach((r) => { if (r.home_lat != null && r.home_lng != null) byParent.set(r.parent_id, [...(byParent.get(r.parent_id) ?? []), r]); });
@@ -31,22 +31,21 @@ function planStops(c: Carpool, school: School, direction: "to_school" | "from_sc
   const org = households.find((h) => h.id === c.creator_id) ?? null;
   const orgMember = c.members.find((m) => m.parent_id === c.creator_id);
   const orgHome = org ? { lat: org.lat, lng: org.lng } : orgMember?.home_lat != null && orgMember.home_lng != null ? { lat: orgMember.home_lat, lng: orgMember.home_lng } : null;
-  const others = households.filter((h) => h.id !== c.creator_id);
-  const active = others.filter((h) => !h.absent), absent = others.filter((h) => h.absent);
+  const active = households.filter((h) => !h.absent);
+  const absent = households.filter((h) => h.absent && (direction === "to_school" || h.id !== c.creator_id));
   const gate = { lat: school.lat, lng: school.lng };
   const out: MapStop[] = [];
   let seq = 0;
   const push = (kind: MapStop["kind"], lat: number, lng: number, label: string, sub: string | null | undefined, status: MapStop["status"] = "pending") =>
     out.push({ id: `${kind}:${seq + 1}:${label}`, seq: ++seq, kind, lat, lng, label, sub, status });
   if (direction === "to_school") {
-    if (org) push("pickup", org.lat, org.lng, org.name, `Organiser · ${org.sub}`, org.absent ? "skipped" : "pending");
-    const ordered = optimalOrder(active, orgHome ?? gate, gate, null);
+    const ordered = optimalOrder(active, starterHome ?? orgHome ?? gate, gate, null);
     ordered.forEach((o) => { const h = active.find((x) => x.id === o.id)!; push("pickup", h.lat, h.lng, h.name, h.sub); });
     absent.forEach((h) => push("pickup", h.lat, h.lng, h.name, `${h.sub} · absent today`, "skipped"));
     push("school", gate.lat, gate.lng, school.name, "Everyone reaches school");
   } else {
     push("school", gate.lat, gate.lng, school.name, "Pickup at the gate");
-    const ordered = optimalOrder(active, gate, null, null);
+    const ordered = optimalOrder(active.filter((h) => h.id !== c.creator_id), gate, orgHome, null);
     ordered.forEach((o) => { const h = active.find((x) => x.id === o.id)!; push("drop", h.lat, h.lng, h.name, h.sub); });
     absent.forEach((h) => push("drop", h.lat, h.lng, h.name, `${h.sub} · absent today`, "skipped"));
     if (orgHome) push("home_end", orgHome.lat, orgHome.lng, org ? `${org.name} · home` : "Organiser's home", "Trip ends here");
@@ -79,11 +78,20 @@ export default function CarpoolDetail({ id }: { id: string }) {
   }, [id]);
   useEffect(() => keepFresh(load, 12000), [load]);
 
-  // Route preview: recomputed only when the stop set (or direction) changes.
-  const planned = useMemo(() => (c && school ? planStops(c, school, direction) : []), [c, school, direction]);
+  const starterMember = c?.members.find((m) => m.parent_id === myHousehold);
+  const orgMember = c ? c.members.find((m) => m.parent_id === c.creator_id) : undefined;
+  const starterHome = useMemo(() => starterMember?.home_lat != null && starterMember.home_lng != null
+    ? { lat: starterMember.home_lat, lng: starterMember.home_lng }
+    : null, [starterMember?.home_lat, starterMember?.home_lng]);
+  const creatorHome = useMemo(() => orgMember?.home_lat != null && orgMember.home_lng != null
+    ? { lat: orgMember.home_lat, lng: orgMember.home_lng }
+    : null, [orgMember?.home_lat, orgMember?.home_lng]);
+  const routeOrigin = starterHome ?? creatorHome;
+  // Route preview: recomputed only when the stop set, starter, or direction changes.
+  const planned = useMemo(() => (c && school ? planStops(c, school, direction, starterHome) : []), [c, school, direction, starterHome]);
   useEffect(() => {
     if (!school || !planned.length) return;
-    const key = planned.map((s) => `${s.kind}@${s.lat.toFixed(4)},${s.lng.toFixed(4)}:${s.status}`).join("|");
+    const key = `${routeOrigin?.lat ?? ""},${routeOrigin?.lng ?? ""}|${planned.map((s) => `${s.kind}@${s.lat.toFixed(4)},${s.lng.toFixed(4)}:${s.status}`).join("|")}`;
     if (key === previewKey.current) return;
     previewKey.current = key;
     let alive = true;
@@ -92,11 +100,11 @@ export default function CarpoolDetail({ id }: { id: string }) {
     // getRoute wants the homes (in order) and appends/prepends the gate itself
     const homes = drive.filter((s) => s.kind !== "school").map((s) => ({ id: s.id, name: s.label, lat: s.lat, lng: s.lng }));
     setPreview((p) => (p ? { ...p, stops: planned } : null));
-    getRoute(homes, school, true, fromSchool)
+    getRoute(homes, school, true, fromSchool, !fromSchool ? routeOrigin ?? undefined : undefined)
       .then((r) => { if (alive) setPreview({ stops: planned, route: r.geometry, km: r.distanceKm, min: r.durationMin, road: r.road }); })
       .catch(() => { if (alive) setPreview({ stops: planned, route: [], km: null, min: null, road: false }); });
     return () => { alive = false; };
-  }, [planned, school, direction]);
+  }, [planned, school, direction, routeOrigin]);
 
   const ride = c?.active_ride ?? null;
   const canStart = !!c?.joined.some((m) => m.parent_id === myHousehold);
@@ -116,9 +124,7 @@ export default function CarpoolDetail({ id }: { id: string }) {
     if (!c || !school) return;
     setStarting(true);
     try {
-      const orgMember = c.members.find((m) => m.parent_id === c.creator_id);
-      const creatorHome = orgMember?.home_lat != null && orgMember.home_lng != null ? { lat: orgMember.home_lat, lng: orgMember.home_lng } : null;
-      const r = await startTripSmart({ carpoolId: id, driverUserId: u.id, creatorFamilyId: c.creator_id, riders, school, creatorHome, direction });
+      const r = await startTripSmart({ carpoolId: id, driverUserId: u.id, creatorFamilyId: c.creator_id, starterHome, riders, school, creatorHome, direction });
       toast.ok(r.direction === "from_school" ? "Home run started — school → homes." : "School run started — homes → school.");
       nav.go({ name: "trip", rideId: r.id });
     } catch (e) { toast.danger(e instanceof Error ? e.message : "Couldn't start the trip."); }
@@ -228,7 +234,7 @@ export default function CarpoolDetail({ id }: { id: string }) {
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-accent-soft text-accent-soft-ink"><Clock3 size={20} strokeWidth={2.25} aria-hidden /></span>
                   <div className="min-w-0 flex-1">
                     <p className="text-base font-semibold text-ink-900">Start the {directionLabel(direction).toLowerCase()}</p>
-                    <p className="text-sm text-ink-500">{direction === "to_school" ? "Starts at your current location, collects from the organiser's home first, then the other homes in road order, to school." : "Starts at the school gate, drops riders in road order, and ends at the organiser's home."} Children check in by stop-detection.</p>
+                    <p className="text-sm text-ink-500">{direction === "to_school" ? "Starts at your current location, visits every household in the shortest route, then continues to school." : "Starts at the school gate, drops riders in the shortest route, and ends at the organiser's home."} Children check in by stop-detection.</p>
                     <p className="tnum mt-1 text-xs text-ink-500">Tracking starts on the phone that starts the trip; other members can follow live{u.phone ? ` · parents will call ${u.phone}` : " · add your mobile number in Profile so parents can call you"}.</p>
                   </div>
                 </div>

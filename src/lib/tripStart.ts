@@ -1,10 +1,9 @@
 // One tap to start a trip — everything else is decided by two simple rules:
 //   * DIRECTION is chosen by a joined member when starting: "To school" or
 //     "To home" — two separate routes, never inferred from the clock or GPS.
-//   * The ROUTE always collects the organising family first. School run:
-//     driver's live position → the organiser's home → the other homes in
-//     optimal road order → school. Home run: school first, then the drop
-//     points in optimal order (the organiser's children simply end at home).
+//   * School runs start at the member's live position and order every pickup
+//     together for the shortest route to school. Home runs start at school,
+//     order the other drops, and finish at the organiser's home.
 // Boarding is never assumed: every child checks in by STOP-DETECTION when the
 // car genuinely pulls over at their point (see postLocation on the backends).
 import { api } from "./api";
@@ -26,56 +25,54 @@ export function currentPosition(timeoutMs = 4000): Promise<{ lat: number; lng: n
 }
 
 
-// Ordered stop list for a school run: the organiser's children first (their
-// home anchors the route), then the other homes optimally from there to school.
-// For a home run: drops in optimal order leaving from the school gate.
+// Order every school-run pickup from the starter's location to the school.
+// Home-run drops start at school and include the organiser's home as the end.
 export async function computeOrder(
   ownStops: Stop[],           // organiser-family children (at the organiser's home)
   otherStops: Stop[],         // everyone else's children
   school: School,
   anchorHome: { lat: number; lng: number } | null,
   direction: "to_school" | "from_school",
+  startPosition: { lat: number; lng: number } | null,
 ): Promise<string[]> {
   if (direction === "to_school") {
-    const org = anchorHome ?? { lat: school.lat, lng: school.lng };
-    const pts = otherStops.filter((s) => s.lat != null && s.lng != null);
-    let rest: string[] = pts.map((s) => s.id);
-    if (pts.length > 1) {
-      const nodes = [org, ...pts, { lat: school.lat, lng: school.lng }];
-      const matrix = await roadMatrix(nodes);
-      rest = optimalOrder(pts, org, { lat: school.lat, lng: school.lng }, matrix).map((s) => s.id);
-    }
-    return [...ownStops.map((s) => s.id), ...rest];
+    const pts = [...ownStops, ...otherStops].filter((s) => s.lat != null && s.lng != null);
+    if (pts.length <= 1) return pts.map((s) => s.id);
+    const origin = startPosition ?? anchorHome ?? { lat: school.lat, lng: school.lng };
+    const end = { lat: school.lat, lng: school.lng };
+    const matrix = await roadMatrix([origin, ...pts, end]);
+    return optimalOrder(pts, origin, end, matrix).map((s) => s.id);
   }
-  // home run: school → other drops optimal (organiser's kids end at home — not routed)
+  // The organiser's household is represented by the fixed home_end stop.
   const pts = otherStops.filter((s) => s.lat != null && s.lng != null);
   if (pts.length <= 1) return pts.map((s) => s.id);
-  const org = { lat: school.lat, lng: school.lng };
-  const nodes = [org, ...pts];
+  const origin = { lat: school.lat, lng: school.lng };
+  const nodes = [origin, ...pts, ...(anchorHome ? [anchorHome] : [])];
   const matrix = await roadMatrix(nodes);
-  return optimalOrder(pts, org, null, matrix).map((s) => s.id);
+  return optimalOrder(pts, origin, anchorHome, matrix).map((s) => s.id);
 }
 
-// One call that does everything: chosen direction, organiser-first optimal
-// order, starter's real origin, and start.
+// One call that does everything: chosen direction, starter-based route order,
+// and the correct route origin.
 export async function startTripSmart(opts: {
   carpoolId: string;
   driverUserId: string;
-  creatorFamilyId: string;   // the organising household — the anchor of every route
+  creatorFamilyId: string;   // the organising household — the home-run endpoint
+  starterHome: { lat: number; lng: number } | null;
   riders: { child_id: string; parent_id: string; home_lat?: number | null; home_lng?: number | null; absent?: boolean }[];
   school: School;
   creatorHome: { lat: number; lng: number } | null;
   direction: "to_school" | "from_school";
 }) {
   const direction = opts.direction;
-  const pos = await currentPosition();
-  const origin = pos ?? (direction === "to_school" ? opts.creatorHome : { lat: opts.school.lat, lng: opts.school.lng });
-  const active = opts.riders.filter((r) => !r.absent && r.home_lat != null);
+  const pos = direction === "to_school" ? await currentPosition() : null;
+  const schoolGate = { lat: opts.school.lat, lng: opts.school.lng };
+  const origin = direction === "to_school" ? pos ?? opts.starterHome ?? opts.creatorHome ?? schoolGate : schoolGate;
+  const active = opts.riders.filter((r) => !r.absent && r.home_lat != null && r.home_lng != null);
   const own = active.filter((r) => r.parent_id === opts.creatorFamilyId)
     .map((r) => ({ id: r.child_id, name: "", lat: r.home_lat!, lng: r.home_lng! }));
   const others = active.filter((r) => r.parent_id !== opts.creatorFamilyId)
     .map((r) => ({ id: r.child_id, name: "", lat: r.home_lat!, lng: r.home_lng! }));
-  let order: string[] | null = null;
-  try { order = await computeOrder(own, others, opts.school, opts.creatorHome, direction); } catch { order = null; }
+  const order = await computeOrder(own, others, opts.school, opts.creatorHome, direction, origin);
   return api.startRide(opts.carpoolId, opts.driverUserId, order, direction, origin?.lat ?? null, origin?.lng ?? null);
 }

@@ -1,7 +1,7 @@
 -- ============================================================================
 -- Scenario harness for schema.sql — mirrors the demo logic-tests in SQL.
 -- Runs on the 00_authmock harness (auth.uid() reads the app.uid GUC).
--- Asserts the v7 product rules: organiser-only start, organiser-first order,
+-- Asserts the v7 product rules: joined-member start, starter-origin route order,
 -- stop-detection boarding, drive-past→missed, controller correction, home-run
 -- gate stop + end-at-organiser-home, delete guards, car-less-can't-create,
 -- one-family driving, no ratings.
@@ -112,19 +112,19 @@ begin
   select (e->>'child_id')::uuid into riya from jsonb_array_elements(j->'riders') e where e->>'child_name'='Riya Mehta';
   select (e->>'child_id')::uuid into kabir from jsonb_array_elements(j->'riders') e where e->>'child_name'='Kabir Gupta';
 
-  -- ============ start trip: organiser anchors route, NOBODY auto-boarded ============
+  -- ============ start trip: starter origin orders all pickups, NOBODY auto-boarded ============
   ride := app_start_ride(cp, null, null, 'to_school', aH_LAT, aH_LNG);
   rid := (ride->>'id')::uuid;
   perform _assert(ride->>'status'='active', 'ride started');
   perform _assert(ride->>'direction'='to_school' and (ride->>'origin_lat') is not null, 'trip stores its own direction + origin');
-  perform _assert((ride->'order'->>0)::uuid = riya, 'organiser child is the FIRST routed stop');
+  perform _assert((ride->'order'->>0)::uuid = riya, 'route begins with the pickup nearest the starter origin');
   perform _assert(jsonb_array_length(ride->'order') = 2, 'route covers all travelling children');
   perform _assert(_rider_status(cp, riya)='waiting', 'nobody is auto-boarded at start');
   -- v8: persisted stops in the right order with planned ETAs
   perform _assert(jsonb_array_length(ride->'stops') = 3
     and ride->'stops'->0->>'kind'='pickup' and (ride->'stops'->0->>'child_id')::uuid = riya
     and ride->'stops'->1->>'kind'='pickup' and (ride->'stops'->1->>'child_id')::uuid = kabir
-    and ride->'stops'->2->>'kind'='school' and ride->'stops'->2->>'child_id' is null, 'school run stops: organiser pickup, other pickup, school (in seq)');
+    and ride->'stops'->2->>'kind'='school' and ride->'stops'->2->>'child_id' is null, 'school run stops: ordered pickups then school (in seq)');
   perform _assert((select bool_and(e->>'status'='pending' and (e->>'planned_eta_min') is not null and (e->>'planned_at') is not null and (e->>'eta_min') is not null)
     from jsonb_array_elements(ride->'stops') e), 'every stop starts pending with a planned ETA and a live ETA');
   perform _assert((ride->'stops'->0->>'planned_eta_min')::int < (ride->'stops'->1->>'planned_eta_min')::int

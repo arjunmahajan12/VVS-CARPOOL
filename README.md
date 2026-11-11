@@ -4,9 +4,9 @@ A school carpooling app for **Vasant Valley School, Vasant Kunj, New Delhi** —
 
 ## How trips work
 
-- **Two routes, chosen explicitly.** Every carpool has a *school run* (`to_school`) and a *home run* (`from_school`); the organiser picks which one to start. Never inferred from the clock or GPS.
-- **Route.** School run: driver's live position → the **organiser's home first** → the other homes in optimal road order → school. Home run: school first, then drop points optimally, ending at the organiser's home.
-- **One carpool = one driving family.** Only the organiser's household (the creating parent, or their confirmed family driver) drives that carpool's trips. A different car-owning family runs *their own* carpool. Only a parent who has a car can create one.
+- **Two routes, chosen explicitly.** Every carpool has a *school run* (`to_school`) and a *home run* (`from_school`); any joined member picks which one to start. Never inferred from the clock or GPS.
+- **Route.** School run: the starting member's live position → all joined households in the shortest available road order → school. Home run: school → other households in the shortest available road order → the organiser's home.
+- **One active trip per carpool.** Any joined household can start a trip; that member controls tracking and trip actions while others follow read-only. The organiser or school admin can end an active trip. Only a parent who has a car can create a carpool; car-less families join existing ones.
 - **Seamless boarding via stop-detection.** A child is checked in only when the car actually **stops** near their pickup point (near-stationary GPS, inside a ~150 m fence, for ≥8 s) and then drives away. Driving past never counts — instead it raises a loud *"Missed pickup?"* alert to both the parent and the driver, and the child stays not-on-board.
 - **Parent correction.** A *"Didn't board?"* tap reverts a wrong auto check-in, alerts the carpool, and re-arms the detector.
 - **Auto-end.** The trip closes itself once every child is accounted for (home runs end when the car reaches the organiser's home). Trips also auto-close after midnight.
@@ -78,7 +78,7 @@ The SQL semantics are checked against a throwaway Postgres 16 instance:
 bash supabase/_localtest/run.sh
 ```
 
-This loads `schema.sql` twice (idempotency check) and runs `01_scenario.sql`, which asserts the v7 behaviours — organiser-only start, organiser-first routing, stop-detection boarding, drive-past→missed, parent correction, home-run gate stop + end-at-home, delete guards, car-less-can't-create, and one-family driving — mirroring the 162 in-memory logic tests (103 SQL assertions).
+This loads `schema.sql` twice (idempotency check) and runs `01_scenario.sql`, which asserts joined-member start, starter-origin route ordering, stop-detection boarding, drive-past→missed, parent correction, home-run gate stop + end-at-home, delete guards, and car-less-can't-create.
 
 ## Layout
 

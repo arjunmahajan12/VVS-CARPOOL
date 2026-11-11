@@ -26,14 +26,20 @@ async function fetchT(url: string, opts: any = {}, ms = 9000): Promise<Response>
 
 // Order the pickups (least-detour), then fetch the real road route through
 // origin → ordered stops → school. Falls back to straight lines on any failure.
-export async function getRoute(stops: Stop[], school: School, keepOrder = false, schoolFirst = false): Promise<RouteResult> {
+export async function getRoute(
+  stops: Stop[],
+  school: School,
+  keepOrder = false,
+  schoolFirst = false,
+  origin?: { lat: number; lng: number },
+): Promise<RouteResult> {
   // keepOrder=true trusts the caller's sequence (e.g. a ride's pickup order).
   // schoolFirst=true is for FROM-SCHOOL trips: the drive starts at the gate.
   const order = keepOrder ? [...stops] : optimizeRoute(stops, school).order;
   const homes = order.map((s) => [s.lat, s.lng] as [number, number]);
   const seq: [number, number][] = schoolFirst
     ? [[school.lat, school.lng], ...homes]
-    : [...homes, [school.lat, school.lng]];
+    : [...(origin ? [[origin.lat, origin.lng] as [number, number]] : []), ...homes, [school.lat, school.lng]];
 
   if (ORS_KEY && seq.length >= 2) {
     try {

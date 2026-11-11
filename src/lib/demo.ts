@@ -402,26 +402,35 @@ function startRideInternal(cid: string, driverUserId: string | null | undefined,
   const family = byId(fam);
   const sch = school();
   let olat = originLat ?? null, olng = originLng ?? null;
-  if (olat == null || olng == null) {
-    if (toSchool && family?.home_lat != null && family.home_lng != null) { olat = family.home_lat; olng = family.home_lng; }
-    else { olat = sch.lat; olng = sch.lng; }
-  }
-  // organiser's children FIRST (their home anchors the route), then the others in optimal order
-  const famJoined = members.some((m) => m.carpool_id === cid && m.parent_id === fam && m.status === "joined");
-  const own = toSchool && famJoined && family ? family.children.filter((c) => !isAbsent(cid, c.id)).map((c) => c.id) : [];
-  const others = members.filter((m) => m.carpool_id === cid && m.status === "joined" && m.parent_id !== fam)
-    .flatMap((m) => { const p = byId(m.parent_id); return p && p.home_lat != null && p.home_lng != null ? p.children.filter((c) => !isAbsent(cid, c.id)).map((c) => ({ id: c.id, name: c.name, lat: p.home_lat as number, lng: p.home_lng as number })) : []; });
-  let rest: string[];
-  if (order && order.length) {
-    const valid = new Set(others.map((o) => o.id));
-    rest = order.filter((id) => valid.has(id));
-    others.forEach((o) => { if (!rest.includes(o.id)) rest.push(o.id); });
+  if (toSchool) {
+    const starterHome = byId(anchorOf(starter));
+    if (olat == null || olng == null) {
+      if (starterHome?.home_lat != null && starterHome.home_lng != null) { olat = starterHome.home_lat; olng = starterHome.home_lng; }
+      else if (family?.home_lat != null && family.home_lng != null) { olat = family.home_lat; olng = family.home_lng; }
+      else { olat = sch.lat; olng = sch.lng; }
+    }
   } else {
-    const anchorPt = toSchool && family?.home_lat != null && family.home_lng != null ? { lat: family.home_lat, lng: family.home_lng } : { lat: sch.lat, lng: sch.lng };
-    rest = toSchool ? optimalOrder(others, anchorPt, { lat: sch.lat, lng: sch.lng }, null).map((o) => o.id)
-                    : optimalOrder(others, { lat: sch.lat, lng: sch.lng }, null, null).map((o) => o.id);
+    olat = sch.lat; olng = sch.lng;
   }
-  const ord = [...own, ...rest];
+  // School runs include every household; home runs end at the organiser's home.
+  const famJoined = members.some((m) => m.carpool_id === cid && m.parent_id === fam && m.status === "joined");
+  const ownStops = toSchool && famJoined && family && family.home_lat != null && family.home_lng != null
+    ? family.children.filter((c) => !isAbsent(cid, c.id)).map((c) => ({ id: c.id, name: c.name, lat: family.home_lat!, lng: family.home_lng! }))
+    : [];
+  const otherStops = members.filter((m) => m.carpool_id === cid && m.status === "joined" && m.parent_id !== fam)
+    .flatMap((m) => { const p = byId(m.parent_id); return p && p.home_lat != null && p.home_lng != null ? p.children.filter((c) => !isAbsent(cid, c.id)).map((c) => ({ id: c.id, name: c.name, lat: p.home_lat as number, lng: p.home_lng as number })) : []; });
+  const routeStops = toSchool ? [...ownStops, ...otherStops] : otherStops;
+  let ord: string[];
+  if (order && order.length) {
+    const valid = new Set(routeStops.map((o) => o.id));
+    ord = order.filter((id) => valid.has(id));
+    routeStops.forEach((o) => { if (!ord.includes(o.id)) ord.push(o.id); });
+  } else {
+    const origin = toSchool ? { lat: olat, lng: olng } : { lat: sch.lat, lng: sch.lng };
+    const end = toSchool ? { lat: sch.lat, lng: sch.lng }
+      : family?.home_lat != null && family.home_lng != null ? { lat: family.home_lat, lng: family.home_lng } : null;
+    ord = optimalOrder(routeStops, { lat: origin.lat ?? sch.lat, lng: origin.lng ?? sch.lng }, end, null).map((o) => o.id);
+  }
   const startMs = nowMs();
   const r: RideRow = {
     id: uid(), carpool_id: cid, driver_user_id: starter.id, driver_name: dn, driver_phone: dp, driver_vehicle: dv,
@@ -430,7 +439,7 @@ function startRideInternal(cid: string, driverUserId: string | null | undefined,
     planned_duration_min: null, actual_duration_min: null, on_time: null, distance_km: null,
   };
   rides.push(r);
-  // ride_stops: school run = pickups (organiser first) then the gate; home run = gate, drops, home_end
+  // ride_stops: school run = all pickups then the gate; home run = gate, drops, home_end
   let seq = 0;
   const mkStop = (kind: StopKind, lat: number, lng: number, label: string, childId: string | null = null) => {
     stops.push({ id: uid(), ride_id: r.id, child_id: childId, seq: ++seq, kind, lat, lng, label, status: "pending",
@@ -459,10 +468,11 @@ function startRideInternal(cid: string, driverUserId: string | null | undefined,
   addEvent(r.id, "started", `Trip started — ${dn} driving (${toSchool ? "pickup run" : "drop-home run"})`);
   audience(cid).forEach((u) => notify(u, "Trip started", `"${cp.name}" is on the way with ${dn}. Track it live.`, "trip"));
   if (toSchool) {
-    const firstKid = ord.map(findChild).find((f) => f && f.parent.id !== fam);
+    const starterFamily = anchorOf(starter);
+    const firstKid = ord.map(findChild).find((f) => f && f.parent.id !== starterFamily);
     const st = firstKid ? stopsOf(r.id).find((s) => s.child_id === firstKid.child.id) : null;
     if (firstKid && st?.planned_eta_min != null)
-      notify(firstKid.parent.id, "You're first after the organiser 🚗", `${dn} is about ${Math.max(1, Math.round(st.planned_eta_min))} min away — please have ${firstKid.child.name} ready.`, "trip");
+      notify(firstKid.parent.id, "Your pickup is coming up 🚗", `${dn} is about ${Math.max(1, Math.round(st.planned_eta_min))} min away — please have ${firstKid.child.name} ready.`, "trip");
   }
   emitStops(r.id);
   return r;

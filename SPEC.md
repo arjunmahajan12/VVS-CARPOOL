@@ -13,13 +13,15 @@ These current rules are product behavior, not implementation detail.
 1. **Two routes, chosen explicitly.** Every carpool has a *school run* (`to_school`)
    and a *home run* (`from_school`). A joined member picks which one to start —
    never inferred from the clock or GPS.
-2. **Route.** School run: driver's live position → **organiser's home first** →
-   the other homes in optimal road order → school. Home run: school → drop
-   points optimally, **ending at the organiser's home**.
+2. **Route.** School run: the starting member's live position → all joined
+   households in the shortest available road order → school. Home run: school
+   → other households in the shortest available road order → the organiser's
+   home. The starting member's location is the school-run origin; a home run
+   always starts at the school gate.
 3. **One live-trip controller.** Any joined household can start a carpool trip;
    the account that starts it controls tracking and trip actions, while all other
-   members follow read-only. The carpool organiser and school admin can end any active trip. Route
-   planning remains anchored to the organiser's home. **Only a parent with a
+   members follow read-only. The carpool organiser and school admin can end any
+   active trip. **Only a parent with a
    car (`can_drive`) can create a carpool.** Car-less families join existing ones.
 4. **Seamless boarding by stop-detection.** A child is checked in **only** when the
    car genuinely stops (near-stationary GPS inside the stop fence for ≥ dwell)

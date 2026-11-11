@@ -857,32 +857,31 @@ begin
     if dir not in ('to_school','from_school') then dir := 'to_school'; end if;
     to_school := dir <> 'from_school';
     olat := app_start_ride.origin_lat; olng := app_start_ride.origin_lng;
-    if olat is null or olng is null then
-      if to_school then select home_lat, home_lng into olat, olng from profiles where id=fam; end if;
-      if olat is null then olat := (s->>'lat')::double precision; olng := (s->>'lng')::double precision; end if;
+    if to_school then
+      if olat is null or olng is null then select home_lat, home_lng into olat, olng from profiles where id=_anchor(); end if;
+      if olat is null or olng is null then select home_lat, home_lng into olat, olng from profiles where id=fam; end if;
+      if olat is null or olng is null then olat := (s->>'lat')::double precision; olng := (s->>'lng')::double precision; end if;
+    else
+      olat := (s->>'lat')::double precision; olng := (s->>'lng')::double precision;
     end if;
-    -- organiser's children FIRST (their home anchors the route), then others optimally-ish
-    with own as (
-      select ch.id cid from children ch
-       where ch.parent_id=fam and to_school
-         and exists(select 1 from carpool_members m0 where m0.carpool_id=app_start_ride.carpool_id and m0.parent_id=fam and m0.status='joined')
-         and not exists(select 1 from absences ab where ab.carpool_id=app_start_ride.carpool_id and ab.child_id=ch.id and ab.on_date=current_date)),
-    stops as (
-      select ch.id cid, _dist_km(pr.home_lat,pr.home_lng,(s->>'lat')::double precision,(s->>'lng')::double precision) dschool
+    -- The client supplies a road-distance-optimized order; these distances provide a fallback.
+    with stops as (
+      select ch.id cid,
+             _dist_km(pr.home_lat,pr.home_lng,(s->>'lat')::double precision,(s->>'lng')::double precision) dschool,
+             _dist_km(pr.home_lat,pr.home_lng,olat,olng) dorigin
         from carpool_members m2 join profiles pr on pr.id=m2.parent_id join children ch on ch.parent_id=pr.id
-       where m2.carpool_id=app_start_ride.carpool_id and m2.status='joined' and pr.id <> fam
+       where m2.carpool_id=app_start_ride.carpool_id and m2.status='joined' and (to_school or pr.id <> fam)
          and not exists(select 1 from absences ab where ab.carpool_id=app_start_ride.carpool_id and ab.child_id=ch.id and ab.on_date=current_date)
-         and pr.home_lat is not null),
+         and pr.home_lat is not null and pr.home_lng is not null),
     client_ord as (select t.cid::uuid cid, t.ord from jsonb_array_elements_text(coalesce(app_start_ride.order_ids,'[]'::jsonb)) with ordinality t(cid, ord)),
     merged as (
-      select o.cid, 0 grp, 0::bigint pos from own o
-      union all
-      select st.cid, 1 grp, coalesce(co.ord, 1000 + row_number() over (order by (case when to_school then -st.dschool else st.dschool end) nulls last)) pos
+      select st.cid, coalesce(co.ord, 1000 + row_number() over (
+        order by (case when to_school then st.dorigin else st.dschool end) nulls last, st.cid)) pos
         from stops st left join client_ord co on co.cid = st.cid)
-    select coalesce(jsonb_agg(cid order by grp, pos),'[]'::jsonb) into ord from merged;
+    select coalesce(jsonb_agg(cid order by pos),'[]'::jsonb) into ord from merged;
     insert into rides(carpool_id,driver_user_id,driver_name,driver_phone,driver_vehicle,pickup_order,direction,origin_lat,origin_lng,status,last_lat,last_lng,last_update)
       values (app_start_ride.carpool_id,auth.uid(),dn,dp,dv,ord,dir,olat,olng,'active',olat,olng,now()) returning id into rid;
-    -- ride_stops: school run = pickups in route order (organiser first) then the gate;
+    -- ride_stops: school run = pickups in route order then the gate;
     -- home run = gate first, then drops in route order, then home_end at the organiser's home.
     seq := 0;
     if not to_school then
@@ -900,7 +899,7 @@ begin
     -- (SPEC §3); they are never routed, never ETA'd and never counted as missed.
     for srow in select ch.id cid, ch.name cname, pr.home_lat, pr.home_lng
                   from carpool_members m3 join profiles pr on pr.id=m3.parent_id join children ch on ch.parent_id=pr.id
-                 where m3.carpool_id=app_start_ride.carpool_id and m3.status='joined' and pr.home_lat is not null
+                 where m3.carpool_id=app_start_ride.carpool_id and m3.status='joined' and pr.home_lat is not null and pr.home_lng is not null
                    and exists(select 1 from absences ab where ab.carpool_id=app_start_ride.carpool_id and ab.child_id=ch.id and ab.on_date=current_date)
                    and (to_school or pr.id <> fam) loop
       seq := seq + 1;
@@ -926,10 +925,10 @@ begin
     for a in select _audience(app_start_ride.carpool_id) loop perform _notify(a,'Trip started','"'||nm||'" is on the way with '||dn||'. Track it live.','trip'); end loop;
     if to_school then
       select ch.id, ch.name, ch.parent_id into first_kid, first_name, first_parent
-        from jsonb_array_elements_text(ord) with ordinality t(cid, o) join children ch on ch.id=t.cid::uuid where ch.parent_id <> fam order by t.o limit 1;
+        from jsonb_array_elements_text(ord) with ordinality t(cid, o) join children ch on ch.id=t.cid::uuid where ch.parent_id <> _anchor() order by t.o limit 1;
       if first_parent is not null then
         select s2.planned_eta_min into fkm from ride_stops s2 where s2.ride_id=rid and s2.child_id=first_kid;
-        if fkm is not null then perform _notify(first_parent,'You''re first after the organiser 🚗', dn||' is about '||greatest(1, round(fkm))||' min away — please have '||first_name||' ready.','trip'); end if;
+        if fkm is not null then perform _notify(first_parent,'Your pickup is coming up 🚗', dn||' is about '||greatest(1, round(fkm))||' min away — please have '||first_name||' ready.','trip'); end if;
       end if;
     end if;
   end if;

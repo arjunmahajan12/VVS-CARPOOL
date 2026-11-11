@@ -12,9 +12,8 @@ export function haversineKm(aLat: number, aLng: number, bLat: number, bLng: numb
 }
 
 // OPTIMAL stop ordering (exact, not greedy): brute-force over every permutation,
-// minimising total distance with a FIXED origin (the driver's home) and a fixed
-// end (the school gate for pickups; open-ended for drops, since the driver
-// finishes at their own home anyway). n ≤ 8 stops → at most 40,320 permutations,
+// minimising total distance with a fixed origin and an optional fixed end.
+// n ≤ 8 stops → at most 40,320 permutations,
 // instant. A distance matrix can be supplied (real road distances); falls back
 // to great-circle.
 export function optimalOrder(
