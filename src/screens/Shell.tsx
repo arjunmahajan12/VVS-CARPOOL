@@ -101,13 +101,13 @@ export default function Shell() {
   switch (route.name) {
     case "tab":
       screen =
-        route.tab === "home" ? (isAdmin ? <Admin tab="dashboard" /> : <Home />)
-        : route.tab === "discover" ? (isAdmin ? <Admin tab="verify" /> : isAddon ? <Home /> : <Discover />)
-        : route.tab === "carpools" ? (isAdmin ? <Admin tab="carpools" /> : <Carpools />)
+        route.tab === "home" ? (isAdmin ? <Admin tab="dashboard" unreadCount={unread} /> : <Home />)
+        : route.tab === "discover" ? (isAdmin ? <Admin tab="verify" unreadCount={unread} /> : isAddon ? <Home /> : <Discover />)
+        : route.tab === "carpools" ? (isAdmin ? <Admin tab="carpools" unreadCount={unread} /> : <Carpools />)
         : route.tab === "alerts" ? <Alerts onRead={() => setUnread(0)} />
         : <Profile />;
       break;
-    case "admin": screen = <Admin tab={route.tab} />; break;
+    case "admin": screen = <Admin tab={route.tab} unreadCount={unread} />; break;
     case "carpool": screen = <CarpoolDetail id={route.id} />; break;
     case "trip": screen = <LiveTrip rideId={route.rideId} />; break;
     case "history": screen = <History />; break;

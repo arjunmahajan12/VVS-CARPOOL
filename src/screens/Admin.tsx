@@ -8,6 +8,7 @@ import { keepFresh } from "../lib/bus";
 import { nav, type Route } from "../lib/nav";
 import { classLabel, directionLabel, fmtDate, fmtTime, timeAgo } from "../lib/format";
 import type { AdminAnalytics, AdminStats, Broadcast, Carpool, Incident, Profile, School, Settings } from "../lib/types";
+import { AccountHeaderActions } from "../components/AccountHeaderActions";
 import { Avatar, Button, Card, Chip, EmptyState, Input, LiveBadge, Pill, SectionTitle, Skeleton, Sparkline, Stat, Textarea, TopBar, useConfirm, useToast, cn } from "../components/ui";
 import { LocationPicker } from "../components/map";
 
@@ -25,12 +26,12 @@ const TITLE: Record<AdminTab, string> = { dashboard: "School dashboard", verify:
 const errMsg = (e: unknown, fb: string) => (e instanceof Error ? e.message : fb);
 const pct = (v: number | null | undefined) => (v == null ? "—" : Math.round(v));
 
-export default function Admin({ tab }: { tab: AdminTab }) {
+export default function Admin({ tab, unreadCount = 0 }: { tab: AdminTab; unreadCount?: number }) {
   const chips = useRef<HTMLDivElement>(null);
   useEffect(() => { chips.current?.querySelector<HTMLElement>('[aria-pressed="true"]')?.scrollIntoView({ block: "nearest", inline: "center" }); }, [tab]);
   return (
     <div className="anim-rise min-h-dvh">
-      <TopBar variant="large" title={TITLE[tab]} sub="Vasant Valley · admin" />
+      <TopBar variant="large" title={TITLE[tab]} sub="Vasant Valley · admin" right={<AccountHeaderActions unreadCount={unreadCount} />} />
       <div ref={chips} className="no-scrollbar -mt-1 flex gap-2 overflow-x-auto px-4 py-2">
         {TABS.map((t) => <Chip key={t.key} size="sm" icon={t.icon} selected={t.key === tab} onClick={() => nav.replace({ name: "admin", tab: t.key })}>{t.label}</Chip>)}
       </div>

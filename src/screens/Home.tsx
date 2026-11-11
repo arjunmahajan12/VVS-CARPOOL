@@ -11,6 +11,7 @@ import { nav } from "../lib/nav";
 import { directionLabel, firstName, fmtTime, greeting, timeAgo } from "../lib/format";
 import { pushPermission, subscribePush } from "../lib/push";
 import type { Carpool, Notification, Ride, Stop } from "../lib/types";
+import { AccountHeaderActions } from "../components/AccountHeaderActions";
 import { Avatar, AvatarStack, Button, Card, EmptyState, IconButton, LiveBadge, Pill, SectionTitle, Skeleton, TopBar, useToast, cn } from "../components/ui";
 import { MapView, VVS, type MapStop } from "../components/map";
 
@@ -152,7 +153,7 @@ export default function Home() {
         variant="large"
         title={<><span className="text-ink-500 font-medium">{greeting()},</span> {firstName(u.name)}</>}
         left={<Avatar name={u.name} src={u.photo_url} size="md" ring />}
-        right={<IconButton icon={Bell} label={unread.length ? `${unread.length} unread alerts` : "Alerts"} dot={unread.length > 0} onClick={() => nav.tab("alerts")} />}
+        right={<AccountHeaderActions unreadCount={unread.length} />}
       />
 
       <div className="grid gap-4 px-4 pb-6 pt-1 *:min-w-0">

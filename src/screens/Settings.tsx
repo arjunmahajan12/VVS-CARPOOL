@@ -1,18 +1,17 @@
-// Settings — theme, push alerts on this device, terms (with accept when a
-// new version is out), and sign out.
+// Settings — theme, push alerts on this device, and terms (with accept when a
+// new version is out).
 import { useEffect, useState } from "react";
-import { BellRing, FileText, LogOut, Monitor, Moon, ShieldCheck, Sun } from "lucide-react";
+import { BellRing, FileText, Monitor, Moon, ShieldCheck, Sun } from "lucide-react";
 import { useAuth } from "../context/auth";
 import { api, MODE } from "../lib/api";
 import { nav } from "../lib/nav";
 import { getTheme, onThemeChange, setTheme, type ThemePref } from "../lib/theme";
 import { isPushSubscribed, pushPermission, pushSupport, subscribePush, unsubscribePush } from "../lib/push";
-import { Button, Card, Pill, SectionTitle, SegmentedControl, TopBar, useConfirm, useToast, cn } from "../components/ui";
+import { Button, Card, Pill, SectionTitle, SegmentedControl, TopBar, useToast, cn } from "../components/ui";
 
 export default function Settings() {
-  const { user, signOut, refresh } = useAuth();
+  const { user, refresh } = useAuth();
   const toast = useToast();
-  const confirm = useConfirm();
   const u = user!;
   const [theme, setThemeState] = useState<ThemePref>(getTheme());
   const [pushOn, setPushOn] = useState<boolean | null>(null);
@@ -20,7 +19,6 @@ export default function Settings() {
   const [tnc, setTnc] = useState<{ version: number; body: string } | null | undefined>(undefined);
   const [showTnc, setShowTnc] = useState(false);
   const [tncBusy, setTncBusy] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
   const support = pushSupport();
   const perm = pushPermission();
 
@@ -54,13 +52,6 @@ export default function Settings() {
     try { await api.acceptTnc(); await refresh(); toast.ok("Thanks — terms accepted."); }
     catch (e) { toast.danger(e instanceof Error ? e.message : "Couldn't record that."); }
     finally { setTncBusy(false); }
-  }
-
-  async function doSignOut() {
-    if (!(await confirm({ title: "Sign out?", message: "You'll stop receiving in-app alerts on this device until you sign in again.", confirmLabel: "Sign out", danger: false, icon: LogOut }))) return;
-    setSigningOut(true);
-    await signOut();
-    nav.reset();
   }
 
   const needsAccept = !!u.needs_tnc || (tnc ? tnc.version > (u.tnc_version ?? 0) : false);
@@ -125,9 +116,8 @@ export default function Settings() {
         </section>
 
         <section>
-          <Card padding="md" className="grid gap-3">
+          <Card padding="md">
             <div className="text-sm text-ink-500">Signed in as <b className="text-ink-900">{u.email}</b></div>
-            <Button variant="ghost" full icon={LogOut} loading={signingOut} onClick={() => void doSignOut()}>Sign out</Button>
           </Card>
           <p className="mt-3 text-center text-xs text-ink-500">VVS Carpool v8 · {MODE === "demo" ? "demo build" : "live"}</p>
         </section>
