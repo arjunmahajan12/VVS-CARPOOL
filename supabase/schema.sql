@@ -388,9 +388,7 @@ create or replace function _ride_active(rid uuid) returns boolean language sql s
   select exists(select 1 from rides where id=rid and status='active')
 $$;
 create or replace function _can_act_on_ride(rid uuid) returns boolean language sql stable as $$
-  select exists(select 1 from rides r where r.id=rid and (
-    r.driver_user_id = auth.uid() or
-    r.carpool_id in (select carpool_id from carpool_members where status='joined' and parent_id=_anchor())))
+  select exists(select 1 from rides r where r.id=rid and r.driver_user_id = auth.uid())
 $$;
 create or replace function _require_approved() returns void language plpgsql stable as $$
 begin
@@ -832,33 +830,29 @@ create or replace function app_start_ride(carpool_id uuid, driver_user_id uuid d
   origin_lat double precision default null, origin_lng double precision default null)
 returns jsonb language plpgsql security definer as $$
 #variable_conflict use_column
-declare rid uuid; cands jsonb; chosen jsonb; du profiles%rowtype;
+declare rid uuid; du profiles%rowtype;
   dn text; dp text; dv text; ord jsonb; s jsonb := app_get_school(); a uuid; nm text;
-  expired boolean; dir text; to_school boolean; fam uuid; olat double precision; olng double precision;
+  dir text; to_school boolean; fam uuid; olat double precision; olng double precision;
   first_kid uuid; first_parent uuid; first_name text; fkm double precision;
   seq int; srow record; fh_lat double precision; fh_lng double precision; fnm text;
 begin
+  perform pg_advisory_xact_lock(hashtext(app_start_ride.carpool_id::text));
   perform _sweep_stale_rides();
   select creator_id into fam from carpools where id=app_start_ride.carpool_id;
   if fam is null then raise exception 'Carpool not found'; end if;
-  if _anchor() <> fam then
-    raise exception 'Only the organising family (or their driver) starts this carpool''s trips — create your own carpool to drive.';
+  perform _require_approved();
+  if not exists(select 1 from carpool_members m
+      where m.carpool_id=app_start_ride.carpool_id and m.parent_id=_anchor() and m.status='joined') then
+    raise exception 'Only a joined carpool member can start this trip.';
+  end if;
+  if app_start_ride.driver_user_id is not null and app_start_ride.driver_user_id <> auth.uid() then
+    raise exception 'You can only start a trip as yourself.';
   end if;
   select id into rid from rides where carpool_id=app_start_ride.carpool_id and status='active' limit 1;
   if rid is null then
-    cands := app_trip_drivers(app_start_ride.carpool_id);
-    if driver_user_id is not null then select v into chosen from jsonb_array_elements(cands) t(v) where (v->>'id')::uuid = app_start_ride.driver_user_id; end if;
-    if chosen is null then select v into chosen from jsonb_array_elements(cands) t(v) where (v->>'id')::uuid = auth.uid(); end if;
-    if chosen is null then select v into chosen from jsonb_array_elements(cands) t(v) where coalesce((v->>'confirmed')::boolean,false) limit 1; end if;
-    if chosen is null then raise exception 'No one is set to drive this trip yet — pick a driver first.'; end if;
-    if not coalesce((chosen->>'confirmed')::boolean,false) then raise exception '% is not confirmed to drive yet — the family must confirm their licence and vehicle first.', chosen->>'name'; end if;
-    select * into du from profiles where id=(chosen->>'id')::uuid;
-    if chosen->>'kind' = 'driver' then
-      expired := exists(select 1 from driver_documents where driver_id=du.id and type in ('licence','insurance') and expiry is not null and expiry < current_date);
-      if expired then raise exception '% licence or insurance has expired — update it before starting.', du.name; end if;
-      dv := du.vehicle->>'plate';
-    else dv := (select driver_vehicle from carpools where id=app_start_ride.carpool_id); end if;
-    dn := chosen->>'name'; dp := coalesce(chosen->>'phone', du.phone);
+    select * into du from profiles where id=auth.uid();
+    dv := coalesce(du.vehicle->>'plate',(select driver_vehicle from carpools where id=app_start_ride.carpool_id));
+    dn := du.name; dp := du.phone;
     dir := coalesce(app_start_ride.direction, case when extract(hour from now() at time zone 'Asia/Kolkata') < 11 then 'to_school' else 'from_school' end);
     if dir not in ('to_school','from_school') then dir := 'to_school'; end if;
     to_school := dir <> 'from_school';
@@ -887,7 +881,7 @@ begin
         from stops st left join client_ord co on co.cid = st.cid)
     select coalesce(jsonb_agg(cid order by grp, pos),'[]'::jsonb) into ord from merged;
     insert into rides(carpool_id,driver_user_id,driver_name,driver_phone,driver_vehicle,pickup_order,direction,origin_lat,origin_lng,status,last_lat,last_lng,last_update)
-      values (app_start_ride.carpool_id,(chosen->>'id')::uuid,dn,dp,dv,ord,dir,olat,olng,'active',olat,olng,now()) returning id into rid;
+      values (app_start_ride.carpool_id,auth.uid(),dn,dp,dv,ord,dir,olat,olng,'active',olat,olng,now()) returning id into rid;
     -- ride_stops: school run = pickups in route order (organiser first) then the gate;
     -- home run = gate first, then drops in route order, then home_end at the organiser's home.
     seq := 0;
@@ -980,7 +974,7 @@ declare
   fin_total int; oth_total int; oth_done int; own_total int; fh_lat double precision; fh_lng double precision; all_done boolean; school_done boolean;
 begin
   if not _ride_active(rid) then raise exception 'This trip has already ended.'; end if;
-  if not _can_act_on_ride(rid) then raise exception 'Only the trip driver or a member can share location'; end if;
+  if not _can_act_on_ride(rid) then raise exception 'Only the member who started this trip can share location'; end if;
   km := _dist_km(clat,clng,st.school_lat,st.school_lng);
   select r.carpool_id, r.driver_user_id into cid, drv from rides r where r.id=rid;
   to_school := _ride_dir(rid) <> 'from_school';
@@ -1190,7 +1184,7 @@ create or replace function app_ride_event(ride_id uuid, type text, note text, ch
 #variable_conflict use_column
 begin
   if not _ride_active(app_ride_event.ride_id) then raise exception 'This trip has already ended.'; end if;
-  if not _can_act_on_ride(app_ride_event.ride_id) then raise exception 'Only people on this carpool can report trip events'; end if;
+  if not _can_act_on_ride(app_ride_event.ride_id) then raise exception 'Only the member who started this trip can control it'; end if;
   if type = 'sos' then raise exception 'SOS has been removed — call the driver or the school office directly.'; end if;
   insert into ride_events(ride_id,type,note,child_id) values (app_ride_event.ride_id,app_ride_event.type,app_ride_event.note,app_ride_event.child_id);
   return jsonb_build_object('ok',true);
@@ -1202,7 +1196,7 @@ create or replace function app_ride_board(ride_id uuid, child_id uuid, pin text 
 declare ts timestamptz := clock_timestamp();
 begin
   if not _ride_active(app_ride_board.ride_id) then raise exception 'This trip has already ended.'; end if;
-  if not _can_act_on_ride(app_ride_board.ride_id) then raise exception 'Only the trip driver or a carpool member can board children'; end if;
+  if not _can_act_on_ride(app_ride_board.ride_id) then raise exception 'Only the member who started this trip can control it'; end if;
   perform _ev_board(app_ride_board.ride_id, app_ride_board.child_id, false);
   update ride_stops set status='done', done_at=ts, stopped_at=coalesce(stopped_at,ts), arrived_at=coalesce(arrived_at,ts),
       delay_min = case when planned_at is null then null else round(extract(epoch from (ts - planned_at))/60)::int end
@@ -1217,7 +1211,7 @@ create or replace function app_ride_unboard(ride_id uuid, child_id uuid) returns
 declare kidname text; a uuid; cid uuid;
 begin
   if not _ride_active(app_ride_unboard.ride_id) then raise exception 'This trip has already ended.'; end if;
-  if not _can_act_on_ride(app_ride_unboard.ride_id) then raise exception 'Only people on this carpool can correct a check-in'; end if;
+  if not _can_act_on_ride(app_ride_unboard.ride_id) then raise exception 'Only the member who started this trip can control it'; end if;
   select name into kidname from children where id=app_ride_unboard.child_id;
   insert into ride_events(ride_id,type,note,child_id) values (app_ride_unboard.ride_id,'unboarded',kidname||' — NOT on board (corrected by parent)',app_ride_unboard.child_id);
   update ride_stops set status='pending', arrived_at=null, stopped_at=null, done_at=null, dwell_s=null, delay_min=null
@@ -1233,7 +1227,7 @@ create or replace function app_ride_drop(ride_id uuid, child_id uuid, place text
 declare ts timestamptz := clock_timestamp();
 begin
   if not _ride_active(app_ride_drop.ride_id) then raise exception 'This trip has already ended.'; end if;
-  if not _can_act_on_ride(app_ride_drop.ride_id) then raise exception 'Only the trip driver or a carpool member can record a drop'; end if;
+  if not _can_act_on_ride(app_ride_drop.ride_id) then raise exception 'Only the member who started this trip can control it'; end if;
   perform _ev_drop(app_ride_drop.ride_id, app_ride_drop.child_id, app_ride_drop.place, false);
   if app_ride_drop.place = 'home' then
     update ride_stops set status='done', done_at=ts, stopped_at=coalesce(stopped_at,ts), arrived_at=coalesce(arrived_at,ts),
@@ -1250,6 +1244,9 @@ begin
   if not exists(select 1 from children where id=app_set_absence.child_id and parent_id=_anchor()) then
     raise exception 'You can only mark your own child absent.';
   end if;
+  if exists(select 1 from rides r where r.carpool_id=app_set_absence.carpool_id and r.status='active') then
+    raise exception 'Absences cannot be changed during an active trip.';
+  end if;
   if absent then
     insert into absences(carpool_id,child_id,on_date) values (app_set_absence.carpool_id, app_set_absence.child_id, current_date) on conflict do nothing;
     update ride_stops s set status='skipped' from rides r where r.id=s.ride_id and r.carpool_id=app_set_absence.carpool_id and r.status='active'
@@ -1265,9 +1262,8 @@ end $$;
 create or replace function app_end_ride(ride_id uuid) returns jsonb language plpgsql security definer as $$
 #variable_conflict use_column
 begin
-  if not (_is_admin() or exists(select 1 from rides r where r.id=app_end_ride.ride_id and (
-      r.driver_user_id = auth.uid() or r.carpool_id in (select carpool_id from carpool_members where status='joined' and parent_id=_anchor())))) then
-    raise exception 'Only the trip driver, a member, or the school admin can end the ride';
+  if not (_is_admin() or exists(select 1 from rides r where r.id=app_end_ride.ride_id and r.driver_user_id = auth.uid())) then
+    raise exception 'Only the member who started this trip or the school admin can end the ride.';
   end if;
   perform _end_ride(app_end_ride.ride_id, 'Trip completed');
   return jsonb_build_object('ok',true);

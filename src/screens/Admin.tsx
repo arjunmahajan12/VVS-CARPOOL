@@ -174,7 +174,7 @@ function AdminCarpools() {
   useEffect(() => keepFresh(load, 15000), [load]);
   async function endStuck(c: Carpool) {
     const r = c.active_ride; if (!r) return;
-    if (!(await confirm({ title: "End this trip?", message: `"${c.name}" has a trip running since ${fmtTime(r.started_at)}. Ending it closes the trip for every parent — use this for a trip that never finished.`, confirmLabel: "End trip", icon: Square }))) return;
+    if (!(await confirm({ title: "End this trip?", message: `End the active "${c.name}" trip for every member?`, confirmLabel: "End trip", icon: Square }))) return;
     setBusy(c.id);
     try { await api.endRide(r.id); toast.ok("Trip ended."); await load(); }
     catch (e) { toast.danger(errMsg(e, "Couldn't end the trip.")); }
@@ -201,7 +201,7 @@ function AdminCarpools() {
           {c.active_ride && (
             <div className="grid grid-cols-2 gap-2 *:min-w-0">
               <Button variant="soft" onClick={() => nav.go({ name: "trip", rideId: c.active_ride!.id })}>Watch live</Button>
-              <Button variant="danger" icon={Square} loading={busy === c.id} onClick={() => endStuck(c)}>End stuck trip</Button>
+              <Button variant="danger" icon={Square} loading={busy === c.id} onClick={() => endStuck(c)}>End trip</Button>
             </div>
           )}
         </Card>

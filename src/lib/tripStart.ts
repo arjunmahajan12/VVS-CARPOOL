@@ -1,5 +1,5 @@
 // One tap to start a trip — everything else is decided by two simple rules:
-//   * DIRECTION is chosen by the organiser when starting: "To school" or
+//   * DIRECTION is chosen by a joined member when starting: "To school" or
 //     "To home" — two separate routes, never inferred from the clock or GPS.
 //   * The ROUTE always collects the organising family first. School run:
 //     driver's live position → the organiser's home → the other homes in
@@ -56,8 +56,8 @@ export async function computeOrder(
   return optimalOrder(pts, org, null, matrix).map((s) => s.id);
 }
 
-// One call that does everything: the chosen direction, organiser-first optimal
-// order, driver's real origin, start.
+// One call that does everything: chosen direction, organiser-first optimal
+// order, starter's real origin, and start.
 export async function startTripSmart(opts: {
   carpoolId: string;
   driverUserId: string;

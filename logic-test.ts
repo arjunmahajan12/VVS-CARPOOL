@@ -62,18 +62,26 @@ async function run() {
 
   // --- Start a trip: organiser anchors route, NOBODY auto-boarded ---
   const stopEvents: Stop[][] = []; const locs: number[] = []; let endedSignal = 0;
-  const ride = await api.startRide("cp1", undefined, null, "to_school", ashaHome.lat, ashaHome.lng);
+  await as("neha@demo.in");
+  const ride = await api.startRide("cp1", "neha", null, "to_school", ashaHome.lat, ashaHome.lng);
   const offStops = api.onRideStops(ride.id, (s) => stopEvents.push(s));
   const offLoc = api.onRideLocation(ride.id, (p) => locs.push(p.lat));
   const offEnd = api.onRideEnded(ride.id, () => { endedSignal++; });
   ok(subscriberCount("stops:" + ride.id) === 1 && subscriberCount("loc:" + ride.id) === 1, "bus topics stops:<rideId> / loc:<rideId> subscribed");
   ok(ride.status === "active", "ride started");
+  ok(ride.driver_user_id === "neha", "any joined member can start and becomes the trip controller");
   ok(ride.direction === "to_school" && ride.origin_lat != null, "trip stores its own direction + origin");
   ok(ride.order?.[0] === riya.child_id, "organiser's child is the FIRST routed stop");
   ok(ride.order?.length === 2, "route covers all travelling children");
   let c = await api.getCarpool("cp1");
   ok(c.riders!.find((r) => r.child_name === "Riya Mehta")!.status === "waiting", "nobody is auto-boarded at start");
   ok(typeof ride.started_at === "string" && ride.ended_at === null && ride.last_update != null, "Ride carries started_at / ended_at / last_update");
+  await as("asha@demo.in");
+  ok(await throws(() => api.postLocation(ride.id, SCH.lat, SCH.lng)), "non-starter cannot share location during a live trip");
+  ok(await throws(() => api.rideBoard(ride.id, riya.child_id)), "non-starter cannot change boarding state");
+  ok(await throws(() => api.endRide(ride.id)), "non-starter member cannot end another member's trip");
+  ok(await throws(() => api.setAbsence("cp1", riya.child_id, true)), "absences cannot be changed during an active trip");
+  await as("neha@demo.in");
 
   // --- v8: persisted stops — kinds, order, planned ETAs ---
   const s0 = ride.stops ?? [];
@@ -152,6 +160,7 @@ async function run() {
   ok(subscriberCount("stops:" + ride.id) === 0, "unsubscribe drops the bus listener");
 
   // --- SOS is rejected ---
+  await as("asha@demo.in");
   const r2 = await api.startRide("cp1", "asha", null, "to_school", ashaHome.lat, ashaHome.lng);
   ok(await throws(() => api.rideEvent(r2.id, "sos", "x")), "SOS events are rejected (feature removed)");
   // drive-past never boards; parent gets a loud missed-pickup alert
@@ -163,10 +172,12 @@ async function run() {
   ok((await api.notifications()).some((n) => n.title === "Missed a pickup? ⚠️"), "driver got the missed-pickup alert too");
   await as("neha@demo.in");
   ok((await api.notifications()).some((n) => n.title.includes("Missed pickup")), "parent got a loud missed-pickup alert");
-  // parent-side correction reverts a wrong check-in
+  // Only the trip controller can correct a wrong check-in.
   await as("asha@demo.in"); await api.rideBoard(r2.id, kabirId);
   ok((await api.getRide(r2.id)).stops!.find((s) => s.child_id === kabirId)!.status === "done", "manual board completes the pickup stop");
-  await as("neha@demo.in"); await api.rideUnboard(r2.id, kabirId);
+  await as("neha@demo.in");
+  ok(await throws(() => api.rideUnboard(r2.id, kabirId)), "another member cannot correct a live trip");
+  await as("asha@demo.in"); await api.rideUnboard(r2.id, kabirId);
   c = await api.getCarpool("cp1");
   ok(c.riders!.find((r) => r.child_id === kabirId)!.status === "waiting", "parent correction reverts the check-in");
   ok((await api.notifications()).some((n) => n.title === "Correction ⚠️"), "correction alerts the carpool");
@@ -215,11 +226,15 @@ async function run() {
   ok(lastDrop.ended === true && kindOf(lastDrop.stops, "home_end")!.status === "skipped", "no organiser child on board → trip ends at the last drop, home_end skipped");
   await api.setAbsence("cp1", riya.child_id, false);
 
-  // --- One carpool = one driving family ---
+  // --- Any joined household can start; only the starter controls the trip ---
   const cands = await api.tripDrivers("cp1");
-  ok(cands.some((d) => d.id === "asha") && !cands.some((d) => d.name === "Neha Gupta"), "only the organiser's household are drivers");
+  ok(cands.some((d) => d.id === "asha") && !cands.some((d) => d.name === "Neha Gupta"), "configured driver list remains separate from trip-start permissions");
   await as("neha@demo.in");
-  ok(await throws(() => api.startRide("cp1", "neha", null, "to_school")), "a member cannot start the organiser's trips");
+  const memberTrip = await api.startRide("cp1", "neha", null, "to_school");
+  ok(memberTrip.driver_user_id === "neha", "a joined member starts and controls the trip");
+  await as("admin@vasantvalley.demo"); await api.endRide(memberTrip.id);
+  ok((await api.getRide(memberTrip.id)).status === "completed", "admin can end the member-started trip");
+  await as("neha@demo.in");
   ok((await api.getCarpool("cp1")).is_org_household === false, "member is not the organising household");
   await as("priya@demo.in");
   ok((await api.getProfile())?.can_drive === false, "Priya has no car");
@@ -268,7 +283,10 @@ async function run() {
   ok(await throws(() => api.deleteCarpool("cp1")), "cannot delete a carpool with a live trip");
 
   // --- Ended-trip guards ---
+  await as("admin@vasantvalley.demo");
   await api.endRide(liveR.id);
+  ok((await api.getRide(liveR.id)).status === "completed", "admin can end any active trip");
+  await as("asha@demo.in");
   ok(await throws(() => api.rideBoard(liveR.id, riya.child_id)), "boarding on an ended trip is rejected");
   ok(await throws(() => api.postLocation(liveR.id, SCH.lat, SCH.lng)), "posting location on an ended trip is rejected");
 

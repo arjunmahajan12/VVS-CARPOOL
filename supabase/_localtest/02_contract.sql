@@ -66,17 +66,36 @@ begin
   perform _assert(j->'vehicle'->>'plate'='DL 3C AB 9999', 'app_update_driver_profile updates the vehicle');
   perform _assert(exists(select 1 from jsonb_array_elements(app_my_driver_carpools()) e where (e->>'id')::uuid=cp), 'app_my_driver_carpools lists the family carpool');
   perform _assert(not exists(select 1 from jsonb_array_elements(app_trip_drivers(cp)) e where (e->>'id')::uuid=a_ramesh and (e->>'confirmed')::boolean), 'unconfirmed driver is not a confirmed trip driver');
-  perform _assert(_raises(format('select app_start_ride(%L,%L,null,%L)', cp, a_ramesh, 'to_school')), 'unconfirmed driver cannot start a trip');
+
+  -- Any joined household can start; only the starter controls the live trip.
+  perform set_config('app.uid',a_priya::text,false);
+  perform _assert(_raises(format('select app_start_ride(%L,%L,null,%L)', cp, a_priya, 'to_school')), 'non-member cannot start a trip');
+  perform set_config('app.uid',a_asha::text,false);
+  perform _assert(_raises(format('select app_start_ride(%L,%L,null,%L)', cp, a_neha, 'to_school')), 'member cannot start on behalf of another user');
+  perform set_config('app.uid',a_neha::text,false);
+  rid := (app_start_ride(cp, a_neha, null, 'to_school'))->>'id';
+  perform _assert(rid is not null and (app_get_ride(rid)->>'driver_user_id')::uuid=a_neha, 'joined member starts the trip as its controller');
+  perform set_config('app.uid',a_asha::text,false);
+  select id into kid from children where parent_id=a_asha and name='Riya Mehta';
+  perform _assert(_raises(format('select app_set_absence(%L,%L,true)', cp, kid)), 'members cannot change absences during a live trip');
+  perform _assert(_raises(format('select app_post_location(%L,%s,%s)',rid,28.5332,77.1441)), 'another member cannot update live location');
+  perform _assert(_raises(format('select app_ride_event(%L,%L,%L)',rid,'note','not the trip controller')), 'another member cannot change live trip events');
+  perform _assert(_raises(format('select app_end_ride(%L)',rid)), 'another member cannot end the live trip');
+  perform set_config('app.uid','00000000-0000-0000-0000-0000000000a0',false);
+  perform app_end_ride(rid);
+  perform _assert((app_get_ride(rid)->>'status')='completed', 'school admin can end any member''s trip');
 
   -- family confirms the driver
+  perform set_config('app.uid',a_asha::text,false);
+  perform set_config('app.uid',a_ramesh::text,false);
+  rid := (app_start_ride(cp, a_ramesh, null, 'to_school'))->>'id';
+  perform _assert(rid is not null and (app_get_ride(rid)->>'driver_user_id')::uuid=a_ramesh, 'a joined household add-on can start and control the trip');
+  perform set_config('app.uid','00000000-0000-0000-0000-0000000000a0',false);
+  perform app_end_ride(rid);
   perform set_config('app.uid',a_asha::text,false);
   j := app_confirm_driver(a_ramesh, true, 'DL 3C AB 1234');
   perform _assert((select driver_status from profiles where id=a_ramesh)='verified', 'app_confirm_driver(true)');
   perform _assert(exists(select 1 from jsonb_array_elements(app_trip_drivers(cp)) e where (e->>'id')::uuid=a_ramesh and (e->>'confirmed')::boolean), 'confirmed driver is a trip driver');
-  perform set_config('app.uid',a_ramesh::text,false);
-  rid := (app_start_ride(cp, a_ramesh, null, 'to_school'))->>'id';
-  perform _assert(rid is not null and (app_get_ride(rid)->>'driver_user_id')::uuid=a_ramesh, 'confirmed driver starts the trip as themselves');
-  perform app_end_ride(rid);
   perform set_config('app.uid',a_asha::text,false);
   perform app_confirm_driver(a_ramesh, false);
   perform _assert((select driver_status from profiles where id=a_ramesh)='incomplete', 'app_confirm_driver(false)');

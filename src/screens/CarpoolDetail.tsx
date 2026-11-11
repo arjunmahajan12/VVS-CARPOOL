@@ -2,9 +2,9 @@
 // before 11:00 IST it's the school run, organiser's home first → other homes
 // → school; after, school → drops → organiser's home) with numbered stops,
 // and a sheet with the live banner, punctuality stats, riders + absences,
-// members, chat, and the organiser-household controls (start / delete).
+// members, chat, and carpool controls (start / delete).
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Car, Check, Clock3, MessageCircle, Phone, Play, Radio, ShieldCheck, Trash2, UserRound, Users, X } from "lucide-react";
+import { Car, Check, Clock3, MessageCircle, Phone, Play, Radio, Trash2, Users, X } from "lucide-react";
 import { useAuth } from "../context/auth";
 import { api } from "../lib/api";
 import { keepFresh } from "../lib/bus";
@@ -13,7 +13,7 @@ import { classLabel, directionLabel, fmtTime } from "../lib/format";
 import { getRoute } from "../lib/routing";
 import { optimalOrder } from "../lib/optimize";
 import { startTripSmart } from "../lib/tripStart";
-import type { Carpool, Member, Rider, School, TripDriver } from "../lib/types";
+import type { Carpool, Member, Rider, School } from "../lib/types";
 import { Avatar, Button, Card, Chip, Divider, EmptyState, ListRow, LiveBadge, Pill, ProgressRail, SectionTitle, SegmentedControl, Skeleton, Sparkline, Stat, StatusBadge, TopBar, useConfirm, useToast, cn, type RailItem } from "../components/ui";
 import { BottomSheet, MapView, SheetHeader, VVS, useSheetInset, type MapStop, type MapPin } from "../components/map";
 
@@ -64,8 +64,6 @@ export default function CarpoolDetail({ id }: { id: string }) {
   const [school, setSchool] = useState<School | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
-  const [drivers, setDrivers] = useState<TripDriver[] | null>(null);
-  const [chosen, setChosen] = useState<string>("");
   const [starting, setStarting] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [snap, setSnap] = useState<number | undefined>(undefined);
@@ -101,10 +99,7 @@ export default function CarpoolDetail({ id }: { id: string }) {
   }, [planned, school, direction]);
 
   const ride = c?.active_ride ?? null;
-  const isOrgHousehold = !!c?.is_org_household;
-  // Who may start a trip: the organising parent, or their CONFIRMED family driver.
-  // Other add-ons (grandparents, helpers) follow the trip but never start one.
-  const canStart = isOrgHousehold && (u.role === "parent" || (u.relation === "driver" && u.driver_status === "verified"));
+  const canStart = !!c?.joined.some((m) => m.parent_id === myHousehold);
   const riders = c?.riders ?? [];
   const joined = c?.joined ?? [];
   const invited = (c?.members ?? []).filter((m) => m.status === "invited");
@@ -114,30 +109,16 @@ export default function CarpoolDetail({ id }: { id: string }) {
   const pins = useMemo<MapPin[]>(() => (school && !planned.length ? [{ id: "school", kind: "school", lat: school.lat, lng: school.lng, label: school.name }] : []), [school, planned.length]);
   const center: [number, number] = school ? [school.lat, school.lng] : VVS;
 
-  async function openStart() {
-    if (!c || !school) return;
-    setStarting(true);
-    try {
-      const list = await api.tripDrivers(id);
-      const confirmed = list.filter((d) => d.confirmed);
-      // A confirmed driver starting the trip is driving it — no need to ask.
-      const self = confirmed.find((d) => d.id === u.id);
-      if (self && u.relation === "driver") { await doStart(self.id); return; }
-      if (confirmed.length === 1) { await doStart(confirmed[0].id); return; }
-      setDrivers(list);
-      setChosen((list.find((d) => d.id === u.id && d.confirmed) ?? confirmed[0])?.id ?? "");
-      setSnap(2);
-    } catch (e) { toast.danger(e instanceof Error ? e.message : "Couldn't load drivers."); }
-    finally { setStarting(false); }
+  function openStart() {
+    if (c && school) void doStart();
   }
-  async function doStart(driverId: string) {
+  async function doStart() {
     if (!c || !school) return;
     setStarting(true);
     try {
       const orgMember = c.members.find((m) => m.parent_id === c.creator_id);
       const creatorHome = orgMember?.home_lat != null && orgMember.home_lng != null ? { lat: orgMember.home_lat, lng: orgMember.home_lng } : null;
-      const r = await startTripSmart({ carpoolId: id, driverUserId: driverId, creatorFamilyId: c.creator_id, riders, school, creatorHome, direction });
-      setDrivers(null);
+      const r = await startTripSmart({ carpoolId: id, driverUserId: u.id, creatorFamilyId: c.creator_id, riders, school, creatorHome, direction });
       toast.ok(r.direction === "from_school" ? "Home run started — school → homes." : "School run started — homes → school.");
       nav.go({ name: "trip", rideId: r.id });
     } catch (e) { toast.danger(e instanceof Error ? e.message : "Couldn't start the trip."); }
@@ -197,7 +178,7 @@ export default function CarpoolDetail({ id }: { id: string }) {
         header={
           <SheetHeader
             title={c ? c.name : "Loading…"}
-            sub={c ? `${c.creator_name ? `${c.creator_name} drives` : "Organiser"} · ${c.seats_used ?? riders.length}/${c.seats ?? "—"} seats${c.driver_vehicle ? ` · ${c.driver_vehicle}` : ""}` : undefined}
+            sub={c ? `${c.creator_name ? `${c.creator_name} organises` : "Organiser"} · ${c.seats_used ?? riders.length}/${c.seats ?? "—"} seats${c.driver_vehicle ? ` · ${c.driver_vehicle}` : ""}` : undefined}
             right={ride ? <LiveBadge /> : c ? <Pill tone={direction === "to_school" ? "primary" : "info"} dot>{directionLabel(direction)}</Pill> : undefined}
           />
         }
@@ -229,29 +210,7 @@ export default function CarpoolDetail({ id }: { id: string }) {
               </Card>
             )}
 
-            {/* driver picker */}
-            {drivers && (
-              <Card padding="md" className="grid gap-3 *:min-w-0">
-                <div><p className="font-display text-md font-bold text-ink-950">Who's driving?</p><p className="text-sm text-ink-500">Only the organiser's household drives this carpool.</p></div>
-                <div className="grid gap-2 *:min-w-0">
-                  {drivers.map((d) => (
-                    <button key={d.id} type="button" disabled={!d.confirmed} onClick={() => setChosen(d.id)} aria-pressed={chosen === d.id}
-                      className={cn("flex items-center gap-3 rounded-md p-3 text-left transition-colors", chosen === d.id ? "bg-primary-soft ring-2 ring-primary" : "hairline", !d.confirmed && "opacity-50")}>
-                      <Avatar name={d.name} size="md" />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-base font-semibold text-ink-900">{d.name}</span>
-                        <span className="block truncate text-sm text-ink-500">{d.kind === "driver" ? `Family driver${d.vehicle ? ` · ${d.vehicle}` : ""}` : "Parent"}{!d.confirmed && " · not confirmed yet"}</span>
-                      </span>
-                      {d.confirmed ? <ShieldCheck size={18} className="shrink-0 text-ok" aria-hidden /> : null}
-                    </button>
-                  ))}
-                  {drivers.length === 0 && <EmptyState icon={UserRound} title="No driver set up" sub="Add a car in Profile, or confirm a family driver." />}
-                </div>
-                <div className="grid grid-cols-2 gap-2 *:min-w-0"><Button variant="ghost" onClick={() => setDrivers(null)}>Cancel</Button><Button icon={Play} disabled={!chosen} loading={starting} onClick={() => doStart(chosen)}>Start trip</Button></div>
-              </Card>
-            )}
-
-            {/* route picker: two separate routes, chosen explicitly */}
+            {/* Any joined member chooses one of the two routes explicitly. */}
             {!ride && (
               <SegmentedControl
                 label="Route"
@@ -262,15 +221,15 @@ export default function CarpoolDetail({ id }: { id: string }) {
               />
             )}
 
-            {/* organiser household: start trip */}
-            {!ride && canStart && !drivers && (
+            {/* Any joined household can start; the starter controls this live trip. */}
+            {!ride && canStart && (
               <Card padding="md" className="grid gap-3 *:min-w-0">
                 <div className="flex items-start gap-3">
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-accent-soft text-accent-soft-ink"><Clock3 size={20} strokeWidth={2.25} aria-hidden /></span>
                   <div className="min-w-0 flex-1">
                     <p className="text-base font-semibold text-ink-900">Start the {directionLabel(direction).toLowerCase()}</p>
-                    <p className="text-sm text-ink-500">{direction === "to_school" ? "Collects from your home first, then the others in road order, to school." : "From the school gate, drops in road order, ending at your home."} Children check in by stop-detection.</p>
-                    <p className="tnum mt-1 text-xs text-ink-500">Tracking starts automatically from the phone that starts the trip{u.phone ? ` · parents will call ${u.phone}` : " · add your mobile number in Profile so parents can call you"}.</p>
+                    <p className="text-sm text-ink-500">{direction === "to_school" ? "Starts at your current location, collects from the organiser's home first, then the other homes in road order, to school." : "Starts at the school gate, drops riders in road order, and ends at the organiser's home."} Children check in by stop-detection.</p>
+                    <p className="tnum mt-1 text-xs text-ink-500">Tracking starts on the phone that starts the trip; other members can follow live{u.phone ? ` · parents will call ${u.phone}` : " · add your mobile number in Profile so parents can call you"}.</p>
                   </div>
                 </div>
                 <Button size="lg" variant="accent" icon={Play} loading={starting} onClick={openStart} full>Start {directionLabel(direction).toLowerCase()}</Button>
@@ -314,7 +273,7 @@ export default function CarpoolDetail({ id }: { id: string }) {
                         </div>
                         {ride && !r.absent ? <StatusBadge rider={r.status} /> : r.absent ? <Pill tone="neutral">Absent today</Pill> : null}
                         {mine && (
-                          <Chip size="sm" selected={r.absent} disabled={busy === `abs:${r.child_id}`} onClick={() => toggleAbsent(r)} aria-label={r.absent ? `Mark ${r.child_name} travelling` : `Mark ${r.child_name} absent today`}>
+                          <Chip size="sm" selected={r.absent} disabled={!!ride || busy === `abs:${r.child_id}`} onClick={() => toggleAbsent(r)} aria-label={r.absent ? `Mark ${r.child_name} travelling` : `Mark ${r.child_name} absent today`}>
                             {r.absent ? "Travelling" : "Absent?"}
                           </Chip>
                         )}
@@ -370,7 +329,7 @@ export default function CarpoolDetail({ id }: { id: string }) {
                 </div>
               </>
             )}
-            <p className="flex items-center gap-1.5 text-xs text-ink-500"><Users size={12} aria-hidden /> One carpool, one driving family — {c.creator_name ?? "the organiser"}'s household drives every trip.</p>
+            <p className="flex items-center gap-1.5 text-xs text-ink-500"><Users size={12} aria-hidden /> Any joined household can start a trip; the starter controls live tracking.</p>
           </div>
         )}
       </BottomSheet>

@@ -339,6 +339,13 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
               </Card>
             )}
 
+            {!isDriver && u.role === "admin" && !ended && (
+              <Card padding="md" className="grid gap-3">
+                <p className="text-sm text-ink-500">School administrator controls</p>
+                <Button variant="danger" icon={Square} loading={busy === "end"} onClick={endTrip} full>End trip</Button>
+              </Card>
+            )}
+
             {/* parent mode: my children */}
             {!isDriver && myRiders.length > 0 && (
               <div className="grid gap-2 *:min-w-0">

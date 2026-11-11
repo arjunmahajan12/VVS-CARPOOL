@@ -6,32 +6,33 @@ is reference only — nothing in it is sacred except the **product rules** below
 
 ---
 
-## 1. Product rules (agreed, do not change)
+## 1. Product rules
 
-These were decided with the school and are the spec, not implementation detail.
+These current rules are product behavior, not implementation detail.
 
 1. **Two routes, chosen explicitly.** Every carpool has a *school run* (`to_school`)
-   and a *home run* (`from_school`). The organiser picks which one to start —
+   and a *home run* (`from_school`). A joined member picks which one to start —
    never inferred from the clock or GPS.
 2. **Route.** School run: driver's live position → **organiser's home first** →
    the other homes in optimal road order → school. Home run: school → drop
    points optimally, **ending at the organiser's home**.
-3. **One carpool = one driving family.** Only the organiser's household (the
-   creating parent or their confirmed family driver) drives that carpool's trips.
-   Another car-owning family creates its own carpool. **Only a parent with a car
-   (`can_drive`) can create a carpool.** Car-less families join existing ones.
+3. **One live-trip controller.** Any joined household can start a carpool trip;
+   the account that starts it controls tracking and trip actions, while all other
+   members follow read-only. The school admin can end any active trip. Route
+   planning remains anchored to the organiser's home. **Only a parent with a
+   car (`can_drive`) can create a carpool.** Car-less families join existing ones.
 4. **Seamless boarding by stop-detection.** A child is checked in **only** when the
    car genuinely stops (near-stationary GPS inside the stop fence for ≥ dwell)
    and then drives away. Driving past never counts.
 5. **Missed stop is loud.** Leaving a pickup area without a qualifying stop raises a
    "Missed pickup?" alert to the parent **and** the driver; child stays not-on-board.
-6. **Parent correction.** A "Didn't board?" tap reverts a wrong check-in, alerts the
-   carpool, and re-arms detection for that child.
+6. **Trip-controller correction.** A "Didn't board?" tap by the trip controller
+   reverts a wrong check-in, alerts the carpool, and re-arms detection for that child.
 7. **Auto-end.** The trip closes itself once every travelling child is accounted for
    (dropped, or flagged missed). Home runs end when the car reaches the organiser's
    home. Any trip still open after midnight IST is auto-closed on next touch.
 8. **Removed for good:** manual driver "confirm boarding", ratings, SOS.
-9. Carpools have **no time/days fields** — trips are ad-hoc; the organiser picks the route.
+9. Carpools have **no time/days fields** — trips are ad-hoc; a joined member picks the route.
 
 ## 2. v8 modules (all built for real)
 
@@ -90,7 +91,7 @@ arriving --d < fence_stop_m && stationary-----> stopped    (stopped_at = now)
 stopped  --d > fence_leave_m && dwell ≥ dwell_s-> done      (board on school run / drop on home run; delay_min)
 stopped  --d > fence_leave_m && dwell < dwell_s-> arriving  (a rolling stop; keep watching)
 arriving --d > fence_miss_m (no qualifying stop)> missed    (event 'missed_pickup', alerts to parent + driver)
-any      --parent correction (unboard)---------> pending    (re-armed)
+any      --trip-controller correction (unboard)-> pending    (re-armed)
 any      --child absent today------------------> skipped
 ```
 School stop on a home run: same machine keyed on the gate (`kind='school'`);
@@ -209,12 +210,12 @@ ride-hailing clone. Map-first screens; calm cards elsewhere.
 | **Home** | Live-trip hero card (if a trip is running: map snippet, next stop, ETA, "Open"), today's direction hint, quick actions, my carpools, unread notifications, push permission nudge once. |
 | **Discover** | Full-bleed map + sheet. Radius ring, family & carpool pins, tap-pin → card in sheet; list ranked by road distance; filters; multi-select invite → creates carpool; request seat on a carpool. Car-less parents see join-only. |
 | **Carpools** | My carpools with live badge, seats, organiser chip, pending invites/requests. |
-| **Carpool detail** | Full-bleed route preview map (ordered numbered stops for today's direction) + sheet: members, riders, absences, chat, start trip (organiser household only; auto-picks the single driver), delete (organiser, never while live). |
-| **Live trip** | Full-bleed map: car, route + travelled, numbered status stops, fences, next-stop callout. Sheet: **stop rail** (vertical timeline with per-stop ETA/delay), driver controls vs read-only parent tracking and status. Boarded/dropped actions require a recent stationary car fix at the stop. Simulate-trip control in demo mode (with stop pauses). |
+| **Carpool detail** | Full-bleed route preview map (ordered numbered stops for today's direction) + sheet: members, riders, absences, chat, start trip (any joined household; starter becomes the trip controller), delete (organiser, never while live). |
+| **Live trip** | Full-bleed map: car, route + travelled, numbered status stops, fences, next-stop callout. Sheet: **stop rail** (vertical timeline with per-stop ETA/delay), starter-only trip controls vs read-only member tracking and status; school admin can end any active trip. Boarded/dropped actions require a recent stationary car fix at the stop. Simulate-trip control in demo mode (with stop pauses). |
 | **Trip history** | List with on-time badge, duration, missed count; tap → **Replay**: map scrubber over the ping trail with events + stops. |
 | **Notifications** | Inbox grouped by day; kinds coloured. |
 | **Profile** | Family (children CRUD, add-ons + driver confirm), car & documents, push toggle, theme, terms, sign out. |
-| **Admin** | Dashboard (stats + punctuality analytics with sparklines), Verify, Carpools (end stuck trip), Incidents (anomalies + missed + off-route), Settings (school pin, **geofence & anomaly rules**, bell times, promote year), Notices + Terms. |
+| **Admin** | Dashboard (stats + punctuality analytics with sparklines), Verify, Carpools (end any active trip), Incidents (anomalies + missed + off-route), Settings (school pin, **geofence & anomaly rules**, bell times, promote year), Notices + Terms. |
 
 ## 8. Realtime
 Supabase broadcast primary (`ride:<id>` channel: `loc`, `event`, `stops`, `ended`),

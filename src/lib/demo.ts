@@ -155,7 +155,7 @@ function requireApproved() { if (me().status !== "approved") throw new Error("Yo
 const joinedCarpoolIds = (parentId: string) => members.filter((m) => m.parent_id === parentId && m.status === "joined").map((m) => m.carpool_id);
 function canActOnRide(r: RideRow): boolean {
   const u = byId(currentId); if (!u) return false;
-  return r.driver_user_id === u.id || joinedCarpoolIds(anchorOf(u)).includes(r.carpool_id);
+  return r.driver_user_id === u.id;
 }
 const isAbsent = (cid: string, childId: string) => absences.has(`${cid}:${childId}:${today()}`);
 
@@ -389,23 +389,14 @@ function startRideInternal(cid: string, driverUserId: string | null | undefined,
   direction: Direction | null | undefined, originLat: number | null | undefined, originLng: number | null | undefined): RideRow {
   sweepStale();
   const cp = carpoolById(cid); if (!cp) throw new Error("Carpool not found");
+  const starter = me();
+  requireApproved();
   const fam = cp.creator_id;
-  if (anchor() !== fam) throw new Error("Only the organising family (or their driver) starts this carpool's trips — create your own carpool to drive.");
+  if (!joinedCarpoolIds(anchorOf(starter)).includes(cid)) throw new Error("Only a joined carpool member can start this trip.");
+  if (driverUserId && driverUserId !== starter.id) throw new Error("You can only start a trip as yourself.");
   const existing = activeRideOf(cid); if (existing) return existing;
-  const cands = tripDriverList(cid);
-  const chosen = (driverUserId ? cands.find((c) => c.id === driverUserId) : undefined)
-    ?? cands.find((c) => c.id === currentId) ?? cands.find((c) => c.confirmed);
-  if (!chosen) throw new Error("No one is set to drive this trip yet — pick a driver first.");
-  if (!chosen.confirmed) throw new Error(`${chosen.name} is not confirmed to drive yet — the family must confirm their licence and vehicle first.`);
-  const du = byId(chosen.id);
-  let dv: string | null;
-  if (chosen.kind === "driver") {
-    const t = today();
-    if ((du?.documents ?? []).some((d) => (d.type === "licence" || d.type === "insurance") && d.expiry && d.expiry < t))
-      throw new Error(`${chosen.name} licence or insurance has expired — update it before starting.`);
-    dv = du?.vehicle?.plate ?? null;
-  } else dv = cp.driver_vehicle;
-  const dn = chosen.name, dp = chosen.phone ?? du?.phone ?? null;
+  const dv = starter.vehicle?.plate ?? cp.driver_vehicle;
+  const dn = starter.name, dp = starter.phone ?? null;
   const dir: Direction = direction === "from_school" || direction === "to_school" ? direction : (istHour(nowMs()) < 11 ? "to_school" : "from_school");
   const toSchool = dir !== "from_school";
   const family = byId(fam);
@@ -433,7 +424,7 @@ function startRideInternal(cid: string, driverUserId: string | null | undefined,
   const ord = [...own, ...rest];
   const startMs = nowMs();
   const r: RideRow = {
-    id: uid(), carpool_id: cid, driver_user_id: chosen.id, driver_name: dn, driver_phone: dp, driver_vehicle: dv,
+    id: uid(), carpool_id: cid, driver_user_id: starter.id, driver_name: dn, driver_phone: dp, driver_vehicle: dv,
     order: ord, direction: dir, origin_lat: olat, origin_lng: olng, status: "active", started_at: iso(startMs), ended_at: null,
     last_lat: olat, last_lng: olng, last_heading: null, last_update: iso(startMs),
     planned_duration_min: null, actual_duration_min: null, on_time: null, distance_km: null,
@@ -1050,7 +1041,7 @@ export const demoBackend: Backend = {
     if (activeRideOf(carpoolId)) throw new Error("End the live trip before leaving this carpool.");
     const mem = members.find((x) => x.carpool_id === carpoolId && x.parent_id === m.id); if (mem) mem.status = "left";
     if (cp && cp.creator_id === m.id) {
-      // ONE carpool = ONE driving family: hand over only to a family that has a car.
+      // Carpool ownership can transfer only to a family that has a car.
       const next = members.find((x) => x.carpool_id === carpoolId && x.status === "joined" && x.parent_id !== m.id && byId(x.parent_id)?.can_drive !== false);
       if (next) {
         cp.creator_id = next.parent_id; next.role = "creator"; if (mem) mem.role = "member";
@@ -1079,6 +1070,7 @@ export const demoBackend: Backend = {
     const m = me(); const cp = carpoolById(carpoolId); if (!cp) throw new Error("Carpool not found");
     const f = findChild(childId);
     if (!f || f.parent.id !== anchorOf(m)) throw new Error("You can only mark your own child absent.");
+    if (activeRideOf(carpoolId)) throw new Error("Absences cannot be changed during an active trip.");
     const key = `${carpoolId}:${childId}:${today()}`;
     const r = activeRideOf(carpoolId);
     if (absent) {
@@ -1110,7 +1102,7 @@ export const demoBackend: Backend = {
   rideEvent: async (rideId, type, note, childId) => {
     const r = rideById(rideId);
     if (!r || r.status !== "active") throw new Error("This trip has already ended.");
-    if (!canActOnRide(r)) throw new Error("Only people on this carpool can report trip events");
+    if (!canActOnRide(r)) throw new Error("Only the member who started this trip can control it.");
     if (type === "sos") throw new Error("SOS has been removed — call the driver or the school office directly.");
     addEvent(rideId, type, note || null, childId ?? null);
     return wait(OK);
@@ -1119,7 +1111,7 @@ export const demoBackend: Backend = {
   rideBoard: async (rideId, childId) => {
     const r = rideById(rideId);
     if (!r || r.status !== "active") throw new Error("This trip has already ended.");
-    if (!canActOnRide(r)) throw new Error("Only the trip driver or a carpool member can board children");
+    if (!canActOnRide(r)) throw new Error("Only the member who started this trip can control it.");
     const tsMs = nowMs(), ts = iso(tsMs);
     evBoard(r, childId, false);
     stopsOf(rideId).filter((s) => s.child_id === childId && s.kind === "pickup" && s.status !== "done").forEach((s) => {
@@ -1132,7 +1124,7 @@ export const demoBackend: Backend = {
   rideUnboard: async (rideId, childId) => {
     const r = rideById(rideId);
     if (!r || r.status !== "active") throw new Error("This trip has already ended.");
-    if (!canActOnRide(r)) throw new Error("Only people on this carpool can correct a check-in");
+    if (!canActOnRide(r)) throw new Error("Only the member who started this trip can control it.");
     const name = findChild(childId)?.child.name ?? "Child";
     addEvent(rideId, "unboarded", `${name} — NOT on board (corrected by parent)`, childId);
     stopsOf(rideId).filter((s) => s.child_id === childId && (s.kind === "pickup" || s.kind === "drop")).forEach((s) => {
@@ -1145,7 +1137,7 @@ export const demoBackend: Backend = {
   rideDrop: async (rideId, childId, place = "school") => {
     const r = rideById(rideId);
     if (!r || r.status !== "active") throw new Error("This trip has already ended.");
-    if (!canActOnRide(r)) throw new Error("Only the trip driver or a carpool member can record a drop");
+    if (!canActOnRide(r)) throw new Error("Only the member who started this trip can control it.");
     const tsMs = nowMs(), ts = iso(tsMs);
     evDrop(r, childId, place, false);
     if (place === "home") stopsOf(rideId).filter((s) => s.child_id === childId && s.kind === "drop" && s.status !== "done").forEach((s) => {
@@ -1156,8 +1148,8 @@ export const demoBackend: Backend = {
   },
   endRide: async (rideId) => {
     const m = me(); const r = rideById(rideId); if (!r) return wait(OK);
-    if (!(m.role === "admin" || r.driver_user_id === m.id || joinedCarpoolIds(anchorOf(m)).includes(r.carpool_id)))
-      throw new Error("Only the trip driver, a member, or the school admin can end the ride");
+    if (!(m.role === "admin" || r.driver_user_id === m.id))
+      throw new Error("Only the member who started this trip or the school admin can end the ride.");
     endRideInternal(r, "Trip completed");
     return wait(OK);
   },

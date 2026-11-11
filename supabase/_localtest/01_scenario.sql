@@ -2,7 +2,7 @@
 -- Scenario harness for schema.sql — mirrors the demo logic-tests in SQL.
 -- Runs on the 00_authmock harness (auth.uid() reads the app.uid GUC).
 -- Asserts the v7 product rules: organiser-only start, organiser-first order,
--- stop-detection boarding, drive-past→missed, parent correction, home-run
+-- stop-detection boarding, drive-past→missed, controller correction, home-run
 -- gate stop + end-at-organiser-home, delete guards, car-less-can't-create,
 -- one-family driving, no ratings.
 -- v8 additions: persisted ride_stops (kinds/order/planned ETAs), the
@@ -170,7 +170,7 @@ begin
   perform _assert(hist->0 ? 'on_time' and (hist->0->>'stops_done')::int = 3 and (hist->0->>'stops_total')::int = 3 and (hist->0->>'missed_count')::int = 0
     and hist->0 ? 'duration_min' and hist->0 ? 'distance_km', 'history rows carry on_time / duration / distance / stop counts');
 
-  -- ============ SOS removed; drive-past → missed; parent correction ============
+  -- ============ SOS removed; drive-past → missed; controller correction ============
   ride := app_start_ride(cp, '00000000-0000-0000-0000-0000000000a1', null, 'to_school', aH_LAT, aH_LNG);
   r2 := (ride->>'id')::uuid;
   perform _assert(_raises(format('select app_ride_event(%L,%L,%L)', r2, 'sos', 'x')), 'SOS events are rejected (feature removed)');
@@ -184,14 +184,16 @@ begin
   perform set_config('app.uid','00000000-0000-0000-0000-0000000000a2',false);
   perform _assert(exists(select 1 from notifications where user_id='00000000-0000-0000-0000-0000000000a2' and title like 'Missed pickup%'), 'parent got a loud missed-pickup alert');
   perform _assert(exists(select 1 from notifications where user_id='00000000-0000-0000-0000-0000000000a1' and title like 'Missed a pickup%'), 'driver got the missed-pickup alert too');
-  -- wrong manual check-in, then parent reverts it
+  -- wrong manual check-in; another member cannot revert it, but the controller can
   perform set_config('app.uid','00000000-0000-0000-0000-0000000000a1',false);
   perform app_ride_board(r2, kabir, null);
   perform _assert(_rider_status(cp, kabir)='boarded', 'manual board sets boarded');
   perform _assert((_stop(r2, kabir)).status='done', 'manual board completes the stop');
   perform set_config('app.uid','00000000-0000-0000-0000-0000000000a2',false);
+  perform _assert(_raises(format('select app_ride_unboard(%L,%L)', r2, kabir)), 'another member cannot change check-in status');
+  perform set_config('app.uid','00000000-0000-0000-0000-0000000000a1',false);
   perform app_ride_unboard(r2, kabir);
-  perform _assert(_rider_status(cp, kabir)='waiting', 'parent correction reverts the check-in');
+  perform _assert(_rider_status(cp, kabir)='waiting', 'trip controller correction reverts the check-in');
   ks := _stop(r2, kabir);
   perform _assert(ks.status='pending' and ks.done_at is null and ks.stopped_at is null and ks.delay_min is null, 'correction re-arms the stop (back to pending)');
   -- a later genuine stop boards the child
@@ -278,12 +280,18 @@ begin
     and jsonb_array_length(stats->'trend') = 5 and (stats->'trend'->0) ? 'date' and (stats->'trend'->0) ? 'on_time', 'carpool stats: trips, on_time_pct, avg delay, missed rate, duration, trend');
   perform _assert((select (e->>'date') from jsonb_array_elements(stats->'trend') e limit 1) <= (select (e->>'date') from jsonb_array_elements(stats->'trend') e offset 4 limit 1), 'trend runs oldest → newest');
 
-  -- ============ one carpool = one driving family ============
+  -- ============ any joined member can start, starter controls live trip ============
   cands := app_trip_drivers(cp);
   perform _assert(exists(select 1 from jsonb_array_elements(cands) e where (e->>'id')::uuid='00000000-0000-0000-0000-0000000000a1')
-              and not exists(select 1 from jsonb_array_elements(cands) e where e->>'name'='Neha Gupta'), 'only the organiser household are drivers');
+              and not exists(select 1 from jsonb_array_elements(cands) e where e->>'name'='Neha Gupta'), 'configured driver list remains separate from who can start a trip');
   perform set_config('app.uid','00000000-0000-0000-0000-0000000000a2',false);
-  perform _assert(_raises(format('select app_start_ride(%L,%L,null,%L)', cp, '00000000-0000-0000-0000-0000000000a2','to_school')), 'a member cannot start the organiser trips');
+  ride := app_start_ride(cp, '00000000-0000-0000-0000-0000000000a2', null, 'to_school', aH_LAT, aH_LNG);
+  live := (ride->>'id')::uuid;
+  perform _assert((ride->>'driver_user_id')::uuid='00000000-0000-0000-0000-0000000000a2', 'joined member can start and becomes the trip controller');
+  perform set_config('app.uid','00000000-0000-0000-0000-0000000000a1',false);
+  perform _assert(_raises(format('select app_end_ride(%L)', live)), 'another member cannot end the trip');
+  perform set_config('app.uid','00000000-0000-0000-0000-0000000000a0',false);
+  perform app_end_ride(live);
   perform set_config('app.uid','00000000-0000-0000-0000-0000000000a3',false);
   perform _assert((app_get_profile()->>'can_drive')='false', 'Priya has no car');
   perform _assert(_raises('select app_create_carpool(''{"name":"X"}''::jsonb)'), 'a car-less parent cannot create a carpool');
