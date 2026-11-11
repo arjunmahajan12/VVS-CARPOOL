@@ -1262,8 +1262,10 @@ end $$;
 create or replace function app_end_ride(ride_id uuid) returns jsonb language plpgsql security definer as $$
 #variable_conflict use_column
 begin
-  if not (_is_admin() or exists(select 1 from rides r where r.id=app_end_ride.ride_id and r.driver_user_id = auth.uid())) then
-    raise exception 'Only the member who started this trip or the school admin can end the ride.';
+  if not (_is_admin()
+      or _ride_family(app_end_ride.ride_id)=_anchor()
+      or exists(select 1 from rides r where r.id=app_end_ride.ride_id and r.driver_user_id = auth.uid())) then
+    raise exception 'Only the trip starter, carpool organiser, or school admin can end the ride.';
   end if;
   perform _end_ride(app_end_ride.ride_id, 'Trip completed');
   return jsonb_build_object('ok',true);

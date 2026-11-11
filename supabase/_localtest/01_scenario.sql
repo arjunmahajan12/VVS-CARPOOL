@@ -289,9 +289,8 @@ begin
   live := (ride->>'id')::uuid;
   perform _assert((ride->>'driver_user_id')::uuid='00000000-0000-0000-0000-0000000000a2', 'joined member can start and becomes the trip controller');
   perform set_config('app.uid','00000000-0000-0000-0000-0000000000a1',false);
-  perform _assert(_raises(format('select app_end_ride(%L)', live)), 'another member cannot end the trip');
-  perform set_config('app.uid','00000000-0000-0000-0000-0000000000a0',false);
   perform app_end_ride(live);
+  perform _assert((app_get_ride(live)->>'status')='completed', 'organiser can end a trip started by another member');
   perform set_config('app.uid','00000000-0000-0000-0000-0000000000a3',false);
   perform _assert((app_get_profile()->>'can_drive')='false', 'Priya has no car');
   perform _assert(_raises('select app_create_carpool(''{"name":"X"}''::jsonb)'), 'a car-less parent cannot create a carpool');

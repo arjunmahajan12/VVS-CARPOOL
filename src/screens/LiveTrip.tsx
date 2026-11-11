@@ -91,8 +91,9 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
   // stop GPS when leaving the screen
   useEffect(() => () => stopGps(), []);
 
-  // Only the assigned driver gets trip controls. Parents and other members follow read-only.
+  // Only the starter gets trip controls; the organiser/admin may additionally end the trip.
   const isDriver = !!ride && ride.driver_user_id === u.id;
+  const canEndRide = isDriver || u.role === "admin" || ride?.carpool?.is_org_household === true;
   useEffect(() => {
     if (ride?.status !== "active") return;
     const timer = window.setInterval(() => setClockNow(Date.now()), 2000);
@@ -339,9 +340,9 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
               </Card>
             )}
 
-            {!isDriver && u.role === "admin" && !ended && (
+            {!isDriver && canEndRide && !ended && (
               <Card padding="md" className="grid gap-3">
-                <p className="text-sm text-ink-500">School administrator controls</p>
+                <p className="text-sm text-ink-500">{u.role === "admin" ? "School administrator controls" : "Carpool organiser controls"}</p>
                 <Button variant="danger" icon={Square} loading={busy === "end"} onClick={endTrip} full>End trip</Button>
               </Card>
             )}

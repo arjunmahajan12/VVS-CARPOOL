@@ -18,7 +18,7 @@ These current rules are product behavior, not implementation detail.
    points optimally, **ending at the organiser's home**.
 3. **One live-trip controller.** Any joined household can start a carpool trip;
    the account that starts it controls tracking and trip actions, while all other
-   members follow read-only. The school admin can end any active trip. Route
+   members follow read-only. The carpool organiser and school admin can end any active trip. Route
    planning remains anchored to the organiser's home. **Only a parent with a
    car (`can_drive`) can create a carpool.** Car-less families join existing ones.
 4. **Seamless boarding by stop-detection.** A child is checked in **only** when the
@@ -211,7 +211,7 @@ ride-hailing clone. Map-first screens; calm cards elsewhere.
 | **Discover** | Full-bleed map + sheet. Radius ring, family & carpool pins, tap-pin → card in sheet; list ranked by road distance; filters; multi-select invite → creates carpool; request seat on a carpool. Car-less parents see join-only. |
 | **Carpools** | My carpools with live badge, seats, organiser chip, pending invites/requests. |
 | **Carpool detail** | Full-bleed route preview map (ordered numbered stops for today's direction) + sheet: members, riders, absences, chat, start trip (any joined household; starter becomes the trip controller), delete (organiser, never while live). |
-| **Live trip** | Full-bleed map: car, route + travelled, numbered status stops, fences, next-stop callout. Sheet: **stop rail** (vertical timeline with per-stop ETA/delay), starter-only trip controls vs read-only member tracking and status; school admin can end any active trip. Boarded/dropped actions require a recent stationary car fix at the stop. Simulate-trip control in demo mode (with stop pauses). |
+| **Live trip** | Full-bleed map: car, route + travelled, numbered status stops, fences, next-stop callout. Sheet: **stop rail** (vertical timeline with per-stop ETA/delay), starter-only trip controls vs read-only member tracking and status; organiser/admin can end any active trip. Boarded/dropped actions require a recent stationary car fix at the stop. Simulate-trip control in demo mode (with stop pauses). |
 | **Trip history** | List with on-time badge, duration, missed count; tap → **Replay**: map scrubber over the ping trail with events + stops. |
 | **Notifications** | Inbox grouped by day; kinds coloured. |
 | **Profile** | Family (children CRUD, add-ons + driver confirm), car & documents, push toggle, theme, terms, sign out. |

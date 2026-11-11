@@ -79,7 +79,6 @@ async function run() {
   await as("asha@demo.in");
   ok(await throws(() => api.postLocation(ride.id, SCH.lat, SCH.lng)), "non-starter cannot share location during a live trip");
   ok(await throws(() => api.rideBoard(ride.id, riya.child_id)), "non-starter cannot change boarding state");
-  ok(await throws(() => api.endRide(ride.id)), "non-starter member cannot end another member's trip");
   ok(await throws(() => api.setAbsence("cp1", riya.child_id, true)), "absences cannot be changed during an active trip");
   await as("neha@demo.in");
 
@@ -232,8 +231,8 @@ async function run() {
   await as("neha@demo.in");
   const memberTrip = await api.startRide("cp1", "neha", null, "to_school");
   ok(memberTrip.driver_user_id === "neha", "a joined member starts and controls the trip");
-  await as("admin@vasantvalley.demo"); await api.endRide(memberTrip.id);
-  ok((await api.getRide(memberTrip.id)).status === "completed", "admin can end the member-started trip");
+  await as("asha@demo.in"); await api.endRide(memberTrip.id);
+  ok((await api.getRide(memberTrip.id)).status === "completed", "organiser can end a trip started by another member");
   await as("neha@demo.in");
   ok((await api.getCarpool("cp1")).is_org_household === false, "member is not the organising household");
   await as("priya@demo.in");
@@ -283,6 +282,8 @@ async function run() {
   ok(await throws(() => api.deleteCarpool("cp1")), "cannot delete a carpool with a live trip");
 
   // --- Ended-trip guards ---
+  await as("neha@demo.in");
+  ok(await throws(() => api.endRide(liveR.id)), "non-organiser member cannot end another member's trip");
   await as("admin@vasantvalley.demo");
   await api.endRide(liveR.id);
   ok((await api.getRide(liveR.id)).status === "completed", "admin can end any active trip");

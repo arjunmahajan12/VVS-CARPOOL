@@ -1148,8 +1148,9 @@ export const demoBackend: Backend = {
   },
   endRide: async (rideId) => {
     const m = me(); const r = rideById(rideId); if (!r) return wait(OK);
-    if (!(m.role === "admin" || r.driver_user_id === m.id))
-      throw new Error("Only the member who started this trip or the school admin can end the ride.");
+    const organizer = carpoolById(r.carpool_id)?.creator_id === anchorOf(m);
+    if (!(m.role === "admin" || organizer || r.driver_user_id === m.id))
+      throw new Error("Only the trip starter, carpool organiser, or school admin can end the ride.");
     endRideInternal(r, "Trip completed");
     return wait(OK);
   },

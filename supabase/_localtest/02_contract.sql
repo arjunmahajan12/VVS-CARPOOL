@@ -80,10 +80,8 @@ begin
   perform _assert(_raises(format('select app_set_absence(%L,%L,true)', cp, kid)), 'members cannot change absences during a live trip');
   perform _assert(_raises(format('select app_post_location(%L,%s,%s)',rid,28.5332,77.1441)), 'another member cannot update live location');
   perform _assert(_raises(format('select app_ride_event(%L,%L,%L)',rid,'note','not the trip controller')), 'another member cannot change live trip events');
-  perform _assert(_raises(format('select app_end_ride(%L)',rid)), 'another member cannot end the live trip');
-  perform set_config('app.uid','00000000-0000-0000-0000-0000000000a0',false);
   perform app_end_ride(rid);
-  perform _assert((app_get_ride(rid)->>'status')='completed', 'school admin can end any member''s trip');
+  perform _assert((app_get_ride(rid)->>'status')='completed', 'organiser can end a trip started by another member');
 
   -- family confirms the driver
   perform set_config('app.uid',a_asha::text,false);
@@ -92,6 +90,7 @@ begin
   perform _assert(rid is not null and (app_get_ride(rid)->>'driver_user_id')::uuid=a_ramesh, 'a joined household add-on can start and control the trip');
   perform set_config('app.uid','00000000-0000-0000-0000-0000000000a0',false);
   perform app_end_ride(rid);
+  perform _assert((app_get_ride(rid)->>'status')='completed', 'school admin can end any member''s trip');
   perform set_config('app.uid',a_asha::text,false);
   j := app_confirm_driver(a_ramesh, true, 'DL 3C AB 1234');
   perform _assert((select driver_status from profiles where id=a_ramesh)='verified', 'app_confirm_driver(true)');
