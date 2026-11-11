@@ -11,7 +11,7 @@ import { keepFresh } from "../lib/bus";
 import { nav } from "../lib/nav";
 import { directionLabel, fmtTime, timeAgo } from "../lib/format";
 import { getRoute } from "../lib/routing";
-import { splitRouteAtCar, type LatLng } from "../lib/geo";
+import { haversineKm, splitRouteAtCar, type LatLng } from "../lib/geo";
 import { onSimChange, startSimulation, stopIfRide, stopSimulation, type SimState } from "../lib/simulate";
 import type { Ride, RideEvent, Rider, Settings, Stop } from "../lib/types";
 import { Avatar, Button, Card, EmptyState, IconButton, LiveBadge, Pill, ProgressRail, SectionTitle, Skeleton, StatusBadge, TopBar, formatEta, useConfirm, useToast, cn, type RailItem } from "../components/ui";
@@ -231,11 +231,16 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
 
   const rail: RailItem[] = stops.map((s) => {
     let trailing: RailItem["trailing"];
-    if (isDriver && !ended && !TERMINAL.has(s.status)) {
+    if (isDriver && !ended) {
       const rs = riders.find((r) => r.child_id === s.child_id)?.status;
-      if (s.kind === "pickup" && rs === "waiting") trailing = <Button size="sm" variant="soft" loading={busy === s.id} onClick={() => markBoarded(s)}>Boarded</Button>;
-      else if (s.kind === "drop" && rs === "boarded") trailing = <Button size="sm" variant="soft" loading={busy === s.id} onClick={() => markDropped(s)}>Dropped</Button>;
-      else if (s.kind === "school" && toSchool && riders.some((r) => r.status === "boarded")) trailing = <Button size="sm" variant="soft" loading={busy === "school"} onClick={markReachedSchool}>At school</Button>;
+      if (!TERMINAL.has(s.status) && s.kind === "pickup" && rs === "waiting") {
+        trailing = <Button size="sm" variant="soft" disabled={s.status !== "stopped"} loading={busy === s.id} onClick={() => markBoarded(s)}>Boarded</Button>;
+      } else if (!TERMINAL.has(s.status) && s.kind === "drop" && rs === "boarded") {
+        trailing = <Button size="sm" variant="soft" loading={busy === s.id} onClick={() => markDropped(s)}>Dropped</Button>;
+      } else if (s.kind === "school" && toSchool && riders.some((r) => r.status === "boarded")) {
+        const atSchool = !!car && !!settings && haversineKm(car.lat, car.lng, s.lat, s.lng) * 1000 <= settings.school_gate_m;
+        trailing = <Button size="sm" variant="soft" disabled={!atSchool} loading={busy === "school"} onClick={markReachedSchool}>At school</Button>;
+      }
     }
     const parentPhone = isDriver && s.child_id ? ride?.carpool?.members.find((m) => m.parent_id === s.parent_id)?.phone : null;
     const sub = [s.sub, parentPhone].filter(Boolean).join(" · ") || undefined;
