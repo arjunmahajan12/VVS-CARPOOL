@@ -91,7 +91,7 @@ interface StopRow {
   status: StopStatus; planned_eta_min: number | null; planned_at: string | null; eta_min: number | null; eta_at: string | null;
   arrived_at: string | null; stopped_at: string | null; done_at: string | null; dwell_s: number | null; delay_min: number | null;
 }
-interface PingRow { id: number; ride_id: string; lat: number; lng: number; eta_min: number | null; distance_km: number | null; speed_kmh: number | null; heading: number | null; created_at: string; }
+interface PingRow { id: number; ride_id: string; lat: number; lng: number; eta_min: number | null; distance_km: number | null; speed_kmh: number | null; heading: number | null; stationary: boolean; created_at: string; }
 interface EventRow { id: string; ride_id: string; type: string; child_id: string | null; note: string | null; created_at: string; }
 interface NotifRow extends Notification { user_id: string; }
 interface PushRow { endpoint: string; user_id: string; p256dh: string; auth: string; ua: string | null; created_at: string; }
@@ -632,7 +632,7 @@ function postLocationInternal(rid: string, clat: number, clng: number, speedKmh:
   // ---- trail + car position ----
   r.last_lat = clat; r.last_lng = clng; r.last_heading = heading ?? r.last_heading; r.last_update = ts;
   pings.push({ id: ++pingSeq, ride_id: rid, lat: clat, lng: clng, eta_min: e, distance_km: roundN(km, 1),
-    speed_kmh: roundN(spd, 1), heading: roundN(heading, 1), created_at: ts });
+    speed_kmh: roundN(spd, 1), heading: roundN(heading, 1), stationary, created_at: ts });
 
   // ---- AUTO END: every travelling child accounted for (dropped, or flagged missed) ----
   const fin = notAbsentJoinedChildren();
@@ -657,8 +657,8 @@ function postLocationInternal(rid: string, clat: number, clng: number, speedKmh:
     }
   }
 
-  const result: LocationResult = { ride_id: rid, lat: clat, lng: clng, eta_min: e, distance_km: roundN(km, 1), stops: stopsOut(rid), ended, anomalies };
-  emit("loc:" + rid, { ride_id: rid, lat: clat, lng: clng, heading: heading ?? null, eta_min: e, distance_km: result.distance_km });
+  const result: LocationResult = { ride_id: rid, lat: clat, lng: clng, eta_min: e, distance_km: roundN(km, 1), speed_kmh: roundN(spd, 1), stationary, created_at: ts, stops: stopsOut(rid), ended, anomalies };
+  emit("loc:" + rid, { ride_id: rid, lat: clat, lng: clng, heading: heading ?? null, speed_kmh: result.speed_kmh, stationary, eta_min: e, distance_km: result.distance_km, created_at: ts });
   emit("stops:" + rid, result.stops);
   if (ended) emit("ended:" + rid, { ride_id: rid });
   return result;

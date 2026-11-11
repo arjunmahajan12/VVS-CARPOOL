@@ -1,9 +1,9 @@
 // Live trip — full-bleed map (car with heading, planned route + travelled
 // slice, numbered status stops, fences around the next stop) and a sheet with
 // the stop rail. Driver mode shares GPS (or, in demo, simulates the drive);
-// parent mode shows their child's status with the "Didn't board?" correction.
+// parent mode follows the trip and displays status without trip controls.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Car, CheckCircle2, Clapperboard, Flag, Hand, LocateFixed, MapPin, Navigation, Phone, Radio, Satellite, Square, TrafficCone, Undo2, UserRound, XCircle } from "lucide-react";
+import { AlertTriangle, Car, CheckCircle2, Clapperboard, Flag, LocateFixed, MapPin, Navigation, Phone, Radio, Satellite, Square, TrafficCone, Undo2, XCircle } from "lucide-react";
 import { useAuth } from "../context/auth";
 import { api, MODE } from "../lib/api";
 import { isDemoAccount } from "../lib/demoAccounts";
@@ -45,7 +45,8 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [stops, setStops] = useState<Stop[]>([]);
   const [events, setEvents] = useState<RideEvent[]>([]);
-  const [car, setCar] = useState<{ lat: number; lng: number; heading?: number | null } | null>(null);
+  const [car, setCar] = useState<{ lat: number; lng: number; heading?: number | null; speed_kmh: number | null; stationary: boolean; updatedAt: number } | null>(null);
+  const [clockNow, setClockNow] = useState(Date.now());
   const [settings, setSettings] = useState<Settings | null>(null);
   const [route, setRoute] = useState<LatLng[] | null>(null);
   const [follow, setFollow] = useState(true);
@@ -66,7 +67,7 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
     try {
       const r = await api.getRide(rideId);
       setRide(r); setStops(r.stops ?? []); setEvents(r.events ?? []); setError(null);
-      if (r.last_lat != null && r.last_lng != null) setCar((c) => (c ? c : { lat: r.last_lat as number, lng: r.last_lng as number, heading: r.last_heading ?? null }));
+      if (r.last_lat != null && r.last_lng != null) setCar((c) => (c ? c : { lat: r.last_lat as number, lng: r.last_lng as number, heading: r.last_heading ?? null, speed_kmh: null, stationary: false, updatedAt: r.last_update ? Date.parse(r.last_update) : 0 }));
       if (r.status !== "active") setEnded(true);
     } catch (e) { setError(e instanceof Error ? e.message : "Couldn't load this trip."); }
   }, [rideId]);
@@ -75,7 +76,7 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
 
   // realtime
   useEffect(() => {
-    const offLoc = api.onRideLocation(rideId, (p) => setCar({ lat: p.lat, lng: p.lng, heading: p.heading ?? null }));
+    const offLoc = api.onRideLocation(rideId, (p) => setCar({ lat: p.lat, lng: p.lng, heading: p.heading ?? null, speed_kmh: p.speed_kmh ?? null, stationary: p.stationary === true, updatedAt: Date.now() }));
     const offStops = api.onRideStops(rideId, (s) => setStops(s));
     const offEv = api.onRideEvents(rideId, (e) => { setEvents((xs) => (xs.some((x) => x.id === e.id) ? xs : [...xs, e])); void load(); });
     const offEnd = api.onRideEnded(rideId, () => {
@@ -90,9 +91,13 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
   // stop GPS when leaving the screen
   useEffect(() => () => stopGps(), []);
 
-  // Driver controls: the person driving this trip, or the organising parent
-  // (who can end/correct their own carpool's trip). Other add-ons only follow.
-  const isDriver = !!ride && (ride.driver_user_id === u.id || (!!ride.carpool?.is_org_household && u.role === "parent"));
+  // Only the assigned driver gets trip controls. Parents and other members follow read-only.
+  const isDriver = !!ride && ride.driver_user_id === u.id;
+  useEffect(() => {
+    if (ride?.status !== "active") return;
+    const timer = window.setInterval(() => setClockNow(Date.now()), 2000);
+    return () => window.clearInterval(timer);
+  }, [ride?.status]);
   // The simulated drive is a demo tool: always in demo mode, and for the seeded
   // demo accounts on a live site (so a reviewer can run a trip without a car).
   const canSimulate = MODE === "demo" || isDemoAccount(u.email);
@@ -175,11 +180,8 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
   // ---- demo: simulate the drive along the road route
   function simulate() {
     if (!ride) return;
-    const path: LatLng[] = route && route.length > 1 ? route : (() => {
-      const pts = stops.filter((s) => s.status !== "skipped").map((s) => [s.lat, s.lng] as LatLng);
-      if (toSchool && ride.origin_lat != null && ride.origin_lng != null) pts.unshift([ride.origin_lat, ride.origin_lng]);
-      return pts;
-    })();
+    if (!route || route.length < 2) { toast.info("The road route is still loading."); return; }
+    const path: LatLng[] = route;
     stopGps();
     const ok = startSimulation({
       rideId, path, stops: stops.filter((s) => s.status !== "skipped").map((s) => ({ lat: s.lat, lng: s.lng })), dwellS: settings?.dwell_s ?? 8,
@@ -220,25 +222,23 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
     catch (e) { toast.danger(e instanceof Error ? e.message : "Couldn't update."); }
     finally { setBusy(null); }
   }
-  async function didntBoard(r: Rider) {
-    const ok = await confirm({ title: `${r.child_name} didn't board?`, message: "This reverts the check-in, alerts the driver and the carpool right away, and re-arms the stop so it can be detected again.", confirmLabel: "Yes — not on board", icon: Hand });
-    if (!ok) return;
-    setBusy(`un:${r.child_id}`);
-    try { await api.rideUnboard(rideId, r.child_id); toast.warn("Corrected — the driver has been alerted."); await load(); }
-    catch (e) { toast.danger(e instanceof Error ? e.message : "Couldn't correct."); }
-    finally { setBusy(null); }
-  }
-
   const rail: RailItem[] = stops.map((s) => {
     let trailing: RailItem["trailing"];
     if (isDriver && !ended) {
       const rs = riders.find((r) => r.child_id === s.child_id)?.status;
+      const carStationary = !!car && car.stationary && car.speed_kmh != null && car.speed_kmh <= 3
+        && clockNow - car.updatedAt <= 10000;
       if (!TERMINAL.has(s.status) && s.kind === "pickup" && rs === "waiting") {
-        trailing = <Button size="sm" variant="soft" disabled={s.status !== "stopped"} loading={busy === s.id} onClick={() => markBoarded(s)}>Boarded</Button>;
+        const stoppedAtStop = s.status === "stopped" && carStationary && !!car && !!settings
+          && haversineKm(car.lat, car.lng, s.lat, s.lng) * 1000 <= settings.fence_stop_m;
+        trailing = <Button size="sm" variant="soft" disabled={!stoppedAtStop} loading={busy === s.id} onClick={() => markBoarded(s)}>Boarded</Button>;
       } else if (!TERMINAL.has(s.status) && s.kind === "drop" && rs === "boarded") {
-        trailing = <Button size="sm" variant="soft" disabled={s.status !== "stopped"} loading={busy === s.id} onClick={() => markDropped(s)}>Dropped</Button>;
+        const stoppedAtStop = s.status === "stopped" && carStationary && !!car && !!settings
+          && haversineKm(car.lat, car.lng, s.lat, s.lng) * 1000 <= settings.fence_stop_m;
+        trailing = <Button size="sm" variant="soft" disabled={!stoppedAtStop} loading={busy === s.id} onClick={() => markDropped(s)}>Dropped</Button>;
       } else if (s.kind === "school" && toSchool && riders.some((r) => r.status === "boarded")) {
-        const atSchool = !!car && !!settings && haversineKm(car.lat, car.lng, s.lat, s.lng) * 1000 <= settings.school_gate_m;
+        const atSchool = !!car && clockNow - car.updatedAt <= 10000
+          && !!settings && haversineKm(car.lat, car.lng, s.lat, s.lng) * 1000 <= settings.school_gate_m;
         trailing = <Button size="sm" variant="soft" disabled={!atSchool} loading={busy === "school"} onClick={markReachedSchool}>At school</Button>;
       }
     }
@@ -263,10 +263,10 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
       <TopBar
         variant="map" onBack={() => nav.back()}
         title={ride?.carpool?.name ?? "Live trip"} sub={ride ? `${directionLabel(ride.direction)} · ${ride.driver_name ?? "Driver"}` : undefined}
-        right={<>
+        right={isDriver ? <>
           <IconButton icon={TrafficCone} label={traffic ? "Hide traffic" : "Show traffic"} variant={traffic ? "primary" : "card"} className={cn(!traffic && "glass")} onClick={() => setTraffic((t) => !t)} />
           <IconButton icon={LocateFixed} label={follow ? "Stop following the car" : "Follow the car"} variant={follow ? "primary" : "card"} className={cn(!follow && "glass")} onClick={() => setFollow((f) => !f)} />
-        </>}
+        </> : undefined}
       />
 
       <BottomSheet
@@ -280,7 +280,7 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
         }
       >
         {error && !ride ? (
-          <EmptyState icon={Car} title="Couldn't open this trip" sub={error} action={<Button size="sm" variant="soft" onClick={() => void load()}>Retry</Button>} />
+          <EmptyState icon={Car} title="Couldn't open this trip" sub={error} action={isDriver ? <Button size="sm" variant="soft" onClick={() => void load()}>Retry</Button> : undefined} />
         ) : !ride ? (
           <div className="grid gap-3 *:min-w-0"><Skeleton variant="card" /><Skeleton variant="row" lines={3} /></div>
         ) : (
@@ -289,7 +289,7 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
               <Card padding="md" className="flex items-center gap-3">
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-ok-soft text-ok-ink"><Flag size={20} aria-hidden /></span>
                 <div className="min-w-0 flex-1"><p className="text-base font-semibold text-ink-900">This trip has ended</p><p className="text-sm text-ink-500">{ride.actual_duration_min != null ? `${ride.actual_duration_min} min` : ""}{ride.distance_km != null ? ` · ${ride.distance_km} km` : ""}</p></div>
-                <Button size="sm" onClick={() => nav.replace({ name: "replay", rideId })}>Replay</Button>
+                {isDriver && <Button size="sm" onClick={() => nav.replace({ name: "replay", rideId })}>Replay</Button>}
               </Card>
             )}
 
@@ -330,7 +330,7 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
                     : <Button variant={simActive ? "soft" : "accent"} icon={Satellite} onClick={startGps}>{gps === "error" ? "Retry location" : "Start tracking"}</Button>}
                   {canSimulate && (simActive
                     ? <Button variant="ghost" icon={Square} onClick={() => stopSimulation()}>Pause sim</Button>
-                    : <Button variant="soft" icon={Clapperboard} onClick={simulate} disabled={!stops.length}>Simulate trip</Button>)}
+                    : <Button variant="soft" icon={Clapperboard} onClick={simulate} disabled={!stops.length || !route || route.length < 2}>Simulate trip</Button>)}
                 </div>
                 <Button variant="ghost" icon={Square} loading={busy === "end"} onClick={endTrip} className="text-danger-ink" full>End trip</Button>
               </Card>
@@ -341,7 +341,6 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
               <div className="grid gap-2 *:min-w-0">
                 {myRiders.map((r) => {
                   const st = stops.find((s) => s.child_id === r.child_id);
-                  const canCorrect = !ended && r.status === "boarded";
                   return (
                     <Card key={r.child_id} padding="md" className="grid gap-3 *:min-w-0">
                       <div className="flex items-center gap-3">
@@ -356,17 +355,10 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
                         </div>
                         {ended && st ? <StatusBadge status={st.status} /> : r.absent ? <Pill>Absent</Pill> : st?.status === "missed" ? <StatusBadge status="missed" /> : <StatusBadge rider={r.status} />}
                       </div>
-                      <div className="grid grid-cols-2 gap-2 *:min-w-0">
-                        {ride.driver_phone ? <Button variant="soft" icon={Phone} onClick={() => { window.location.href = `tel:${ride.driver_phone}`; }}>Call {ride.driver_name?.split(" ")[0] ?? "driver"}</Button> : <Button variant="soft" icon={UserRound} disabled>No driver phone</Button>}
-                        <Button variant={canCorrect ? "danger" : "ghost"} icon={Hand} disabled={!canCorrect} loading={busy === `un:${r.child_id}`} onClick={() => didntBoard(r)}>Didn't board?</Button>
-                      </div>
                     </Card>
                   );
                 })}
               </div>
-            )}
-            {!isDriver && myRiders.length === 0 && ride.driver_phone && (
-              <Button variant="soft" icon={Phone} onClick={() => { window.location.href = `tel:${ride.driver_phone}`; }} full>Call {ride.driver_name ?? "the driver"}</Button>
             )}
 
             {/* stop rail */}

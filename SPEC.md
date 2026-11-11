@@ -74,7 +74,7 @@ ride_stops
   delay_min int                                     -- done_at - planned_at, minutes
   unique (ride_id, seq)
 
-ride_pings + speed_kmh numeric, heading numeric
+ride_pings + speed_kmh numeric, heading numeric, stationary boolean
 rides + planned_duration_min int, actual_duration_min int, on_time boolean,
         distance_km numeric
 ride_events.type adds: 'arriving','stopped','anomaly_long_stop','anomaly_speed'
@@ -130,7 +130,7 @@ The full interface is in the file; the method groups are:
   respondJoinRequest, setDriver, leaveCarpool, deleteCarpool, tripDrivers, setAbsence
 - **trips:** startRide(carpoolId, driverUserId?, order?, direction?, originLat?, originLng?),
   activeRides, getRide (includes `stops`), postLocation(rideId, lat, lng, speed?, heading?)
-  → { stops, eta, anomalies }, rideEvent, rideBoard, rideUnboard, rideDrop, endRide,
+  → { stops, eta, speed, stationary, created_at, anomalies }, rideEvent, rideBoard, rideUnboard, rideDrop, endRide,
   tripHistory, tripReplay(rideId) → { ride, stops, pings, events }, carpoolStats(carpoolId)
 - **chat/notifications:** getChat, sendChat, notifications, markNotificationsRead,
   savePushSubscription, removePushSubscription, pushPublicKey
@@ -210,7 +210,7 @@ ride-hailing clone. Map-first screens; calm cards elsewhere.
 | **Discover** | Full-bleed map + sheet. Radius ring, family & carpool pins, tap-pin → card in sheet; list ranked by road distance; filters; multi-select invite → creates carpool; request seat on a carpool. Car-less parents see join-only. |
 | **Carpools** | My carpools with live badge, seats, organiser chip, pending invites/requests. |
 | **Carpool detail** | Full-bleed route preview map (ordered numbered stops for today's direction) + sheet: members, riders, absences, chat, start trip (organiser household only; auto-picks the single driver), delete (organiser, never while live). |
-| **Live trip** | Full-bleed map: car, route + travelled, numbered status stops, fences, next-stop callout. Sheet: **stop rail** (vertical timeline with per-stop ETA/delay), driver mode (GPS share toggle, hands-free copy, end trip) vs parent mode (my child's status, "Didn't board?" correction, call driver). Simulate-trip control in demo mode (with stop pauses). |
+| **Live trip** | Full-bleed map: car, route + travelled, numbered status stops, fences, next-stop callout. Sheet: **stop rail** (vertical timeline with per-stop ETA/delay), driver controls vs read-only parent tracking and status. Boarded/dropped actions require a recent stationary car fix at the stop. Simulate-trip control in demo mode (with stop pauses). |
 | **Trip history** | List with on-time badge, duration, missed count; tap → **Replay**: map scrubber over the ping trail with events + stops. |
 | **Notifications** | Inbox grouped by day; kinds coloured. |
 | **Profile** | Family (children CRUD, add-ons + driver confirm), car & documents, push toggle, theme, terms, sign out. |

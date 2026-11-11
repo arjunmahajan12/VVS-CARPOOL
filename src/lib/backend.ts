@@ -100,7 +100,7 @@ export interface Backend {
   promoteYear(): Promise<{ academic_year: number }>;
 
   // ---- realtime ----
-  onRideLocation(rideId: string, cb: (p: { lat: number; lng: number; heading?: number | null; eta_min?: number | null; distance_km?: number | null }) => void): Unsub;
+  onRideLocation(rideId: string, cb: (p: { lat: number; lng: number; heading?: number | null; speed_kmh?: number | null; stationary?: boolean; eta_min?: number | null; distance_km?: number | null; created_at?: string | null }) => void): Unsub;
   onRideEvents(rideId: string, cb: (e: RideEvent) => void): Unsub;
   onRideStops(rideId: string, cb: (stops: Stop[]) => void): Unsub;
   onRideEnded(rideId: string, cb: () => void): Unsub;

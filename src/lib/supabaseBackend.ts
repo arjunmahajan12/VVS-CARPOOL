@@ -47,7 +47,7 @@ async function resolveSignIn(email: string): Promise<SignInResult> {
 // into plain sets, so subscribing/unsubscribing screens never touches the
 // channel itself. broadcast.self=true so the driver's own screen also glides
 // from its own pushes.
-type LocPayload = { lat: number; lng: number; heading?: number | null; eta_min?: number | null; distance_km?: number | null };
+type LocPayload = { lat: number; lng: number; heading?: number | null; speed_kmh?: number | null; stationary?: boolean; eta_min?: number | null; distance_km?: number | null; created_at?: string | null };
 type Handler<T> = (p: T) => void;
 interface RideBus {
   ch: RealtimeChannel; joined: boolean;
@@ -189,7 +189,7 @@ export const supabaseBackend: Backend = {
     const res = await rpc<LocationResult>("app_post_location", {
       ride_id: rideId, lat, lng, speed_kmh: speedKmh ?? null, heading: heading ?? null,
     });
-    bcast(rideId, "loc", { ride_id: rideId, lat: res.lat, lng: res.lng, heading: heading ?? null, eta_min: res.eta_min, distance_km: res.distance_km });
+    bcast(rideId, "loc", { ride_id: rideId, lat: res.lat, lng: res.lng, heading: heading ?? null, speed_kmh: res.speed_kmh, stationary: res.stationary, eta_min: res.eta_min, distance_km: res.distance_km, created_at: res.created_at });
     bcast(rideId, "stops", res.stops);
     if (res.ended) bcast(rideId, "ended", { ride_id: rideId });
     return res;
@@ -262,13 +262,16 @@ export const supabaseBackend: Backend = {
   onRideLocation: (rideId, cb): Unsub => {
     let lastKey = "";
     const emit = (p: LocPayload) => {
-      const k = `${p.lat},${p.lng},${p.distance_km ?? ""}`;
+      const k = `${p.lat},${p.lng},${p.distance_km ?? ""},${p.created_at ?? ""}`;
       if (k === lastKey) return; lastKey = k; cb(p);
     };
     const b = rideBus(rideId); b.loc.add(emit); busJoin(b);
     const pg = pgChannel("pg-loc:" + rideId, "ride_pings", `ride_id=eq.${rideId}`, "INSERT", (row) =>
       emit({ lat: Number(row.lat), lng: Number(row.lng), heading: row.heading == null ? null : Number(row.heading),
-        eta_min: row.eta_min == null ? null : Number(row.eta_min), distance_km: row.distance_km == null ? null : Number(row.distance_km) }));
+        speed_kmh: row.speed_kmh == null ? null : Number(row.speed_kmh),
+        stationary: row.stationary === true,
+        eta_min: row.eta_min == null ? null : Number(row.eta_min), distance_km: row.distance_km == null ? null : Number(row.distance_km),
+        created_at: row.created_at == null ? null : String(row.created_at) }));
     return () => { b.loc.delete(emit); busMaybeDrop(rideId); drop(pg); };
   },
   onRideEvents: (rideId, cb): Unsub => {

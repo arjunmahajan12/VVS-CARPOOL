@@ -110,6 +110,7 @@ create table if not exists ride_pings (
 -- v8 trail data for replay + anomaly rules
 alter table ride_pings add column if not exists speed_kmh numeric;
 alter table ride_pings add column if not exists heading numeric;
+alter table ride_pings add column if not exists stationary boolean not null default false;
 create index if not exists ride_pings_ride_idx on ride_pings(ride_id, id);
 
 -- v8: persisted per-stop state machine (SPEC §3). All stop memory lives here;
@@ -971,7 +972,7 @@ declare
   km double precision; e int; cid uuid; to_school boolean; fam uuid; drv uuid; nm text;
   rrow record; srow record; d double precision; a uuid; cur text; rs text;
   plat double precision; plng double precision; pat timestamptz; pmove double precision; pdt double precision;
-  p2p double precision; spd double precision; stationary boolean; dwell int;
+  p2p double precision; spd double precision; is_stationary boolean; dwell int;
   near_m double precision := st.fence_near_m; stop_m double precision := st.fence_stop_m;
   leave_m double precision := st.fence_leave_m; miss_m double precision := st.fence_miss_m;
   gate_m double precision := st.school_gate_m; gate_leave_m double precision := st.school_gate_m + greatest(0, st.fence_leave_m - st.fence_stop_m);
@@ -990,7 +991,7 @@ begin
   select p.lat, p.lng, p.created_at into plat, plng, pat from ride_pings p where p.ride_id=rid order by p.id desc limit 1;
   pmove := case when plat is null then null else _dist_km(plat,plng,clat,clng)*1000 end;          -- metres
   pdt := case when pat is null then null else extract(epoch from (ts - pat)) end;                   -- seconds
-  stationary := pmove is not null and pmove < st.stationary_m;
+  is_stationary := pmove is not null and pmove < st.stationary_m;
   p2p := case when pmove is not null and pdt is not null and pdt >= 3 then (pmove/1000.0)/(pdt/3600.0) else null end;
   spd := coalesce(app_post_location.speed_kmh, p2p);
 
@@ -1012,7 +1013,7 @@ begin
         case when to_school then 'Please have '||srow.child_name||' ready — the carpool reaches you in ~'||greatest(1,coalesce(srow.eta_min,1))||' min.'
              else srow.child_name||' is ~'||greatest(1,coalesce(srow.eta_min,1))||' min from home — please be ready to receive them.' end,'trip');
     end if;
-    if cur='arriving' and d < stop_m and stationary then
+    if cur='arriving' and d < stop_m and is_stationary then
       update ride_stops set status='stopped', stopped_at=ts, dwell_s=0 where id=srow.id; cur := 'stopped';
       insert into ride_events(ride_id,type,note,child_id) values (rid,'stopped','Stopped at '||srow.child_name||'''s stop',srow.child_id);
     elsif cur='stopped' then
@@ -1060,7 +1061,7 @@ begin
           delay_min = case when planned_at is null then null else round(extract(epoch from (ts - planned_at))/60)::int end where id=srow.id;
       end if;
     else
-      if cur='arriving' and d < gate_m and stationary then
+      if cur='arriving' and d < gate_m and is_stationary then
         update ride_stops set status='stopped', stopped_at=ts, dwell_s=0 where id=srow.id; cur := 'stopped';
         insert into ride_events(ride_id,type,note) values (rid,'stopped','Stopped at the school gate');
       elsif cur='stopped' then
@@ -1108,7 +1109,7 @@ begin
     anomalies := anomalies || to_jsonb('route_alert'::text);
   end if;
   -- long stop: stationary ≥ long_stop_s away from every stop / the gate, once per stationary episode
-  if stationary then
+  if is_stationary then
     near_any := exists(select 1 from ride_stops s where s.ride_id=rid
       and _dist_km(clat,clng,s.lat,s.lng)*1000 < case when s.kind in ('school','home_end') then greatest(stop_m, gate_m) else stop_m end);
     if not near_any then
@@ -1138,9 +1139,9 @@ begin
 
   -- ---- trail + car position ----
   update rides set last_lat=clat, last_lng=clng, last_heading=coalesce(app_post_location.heading,last_heading), last_update=ts where id=rid;
-  insert into ride_pings(ride_id,lat,lng,eta_min,distance_km,speed_kmh,heading,created_at)
+  insert into ride_pings(ride_id,lat,lng,eta_min,distance_km,speed_kmh,heading,stationary,created_at)
     values (rid,clat,clng,e,round(km::numeric,1),case when spd is null then null else round(spd::numeric,1) end,
-            case when app_post_location.heading is null then null else round(app_post_location.heading::numeric,1) end,ts);
+            case when app_post_location.heading is null then null else round(app_post_location.heading::numeric,1) end,is_stationary,ts);
 
   -- ---- AUTO END: every travelling child accounted for (dropped, or flagged missed) ----
   select count(*),
@@ -1176,7 +1177,8 @@ begin
   end if;
 
   return jsonb_build_object('ride_id',rid,'lat',clat,'lng',clng,'eta_min',e,'distance_km',round(km::numeric,1),
-    'stops',_stops_json(rid),'ended',ended,'anomalies',anomalies);
+    'speed_kmh',case when spd is null then null else round(spd::numeric,1) end,
+    'stationary',is_stationary,'created_at',ts,'stops',_stops_json(rid),'ended',ended,'anomalies',anomalies);
 end $$;
 
 -- The stops array alone (cheap refetch for the realtime backup path).

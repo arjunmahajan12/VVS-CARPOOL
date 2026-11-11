@@ -104,6 +104,7 @@ export interface Ride {
 }
 export interface LocationResult {
   ride_id: string; lat: number; lng: number; eta_min: number | null; distance_km: number | null;
+  speed_kmh: number | null; stationary: boolean; created_at: string;
   stops: Stop[]; ended: boolean; anomalies: string[];
 }
 export interface TripDriver {
