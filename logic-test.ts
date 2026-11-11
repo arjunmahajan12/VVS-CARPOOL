@@ -62,7 +62,7 @@ async function run() {
     { id: riya.child_id, name: riya.child_name, ...ashaHome },
     { id: kabirId, name: "Kabir Gupta", ...nehaHome },
   ], nehaHome, SCH, null);
-  ok(routeFromNeha[0].id === kabirId, "school-run ordering starts from the initiating member's location");
+  ok(routeFromNeha[0].id === kabirId, "school-run ordering starts from the initiating member's home");
   const routeHome = optimalOrder([
     { id: "near-school", name: "Near school", lat: 1, lng: 0 },
     { id: "near-end", name: "Near organiser", lat: 2, lng: 0 },

@@ -234,7 +234,7 @@ export default function CarpoolDetail({ id }: { id: string }) {
                   <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-accent-soft text-accent-soft-ink"><Clock3 size={20} strokeWidth={2.25} aria-hidden /></span>
                   <div className="min-w-0 flex-1">
                     <p className="text-base font-semibold text-ink-900">Start the {directionLabel(direction).toLowerCase()}</p>
-                    <p className="text-sm text-ink-500">{direction === "to_school" ? "Starts at your current location, visits every household in the shortest route, then continues to school." : "Starts at the school gate, drops riders in the shortest route, and ends at the organiser's home."} Children check in by stop-detection.</p>
+                    <p className="text-sm text-ink-500">{direction === "to_school" ? "Pickup order is optimized from your home; the simulation starts there while live tracking uses your current location." : "Starts at the school gate, drops riders in the shortest route, and ends at the organiser's home."} Children check in by stop-detection.</p>
                     <p className="tnum mt-1 text-xs text-ink-500">Tracking starts on the phone that starts the trip; other members can follow live{u.phone ? ` · parents will call ${u.phone}` : " · add your mobile number in Profile so parents can call you"}.</p>
                   </div>
                 </div>

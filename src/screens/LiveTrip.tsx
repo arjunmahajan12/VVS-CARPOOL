@@ -49,6 +49,7 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
   const [clockNow, setClockNow] = useState(Date.now());
   const [settings, setSettings] = useState<Settings | null>(null);
   const [route, setRoute] = useState<LatLng[] | null>(null);
+  const [simulationRoute, setSimulationRoute] = useState<LatLng[] | null>(null);
   const [follow, setFollow] = useState(true);
   const [traffic, setTraffic] = useState(false);
   const [ended, setEnded] = useState(false);
@@ -104,24 +105,52 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
   const canSimulate = MODE === "demo" || isDemoAccount(u.email);
   const toSchool = ride?.direction !== "from_school";
   const school = ride?.school ?? null;
+  const starterMember = ride?.carpool?.members.find((m) => m.parent_id === myHousehold);
+  const starterRider = ride?.carpool?.riders?.find((r) => r.parent_id === myHousehold);
+  const starterLat = starterMember?.home_lat ?? starterRider?.home_lat ?? null;
+  const starterLng = starterMember?.home_lng ?? starterRider?.home_lng ?? null;
+  const starterHome = useMemo(() => starterLat != null && starterLng != null
+    ? { lat: starterLat, lng: starterLng }
+    : null, [starterLat, starterLng]);
+  const routeStopsKey = stops.filter((s) => s.status !== "skipped")
+    .map((s) => `${s.id}:${s.kind}:${s.lat},${s.lng}`).join(",");
+  const simulationPath = toSchool ? simulationRoute : route;
 
-  // planned road route, once per stop-set
+  // Live route and starter-home simulation route, recomputed per stop-set.
   useEffect(() => {
-    if (!ride || !school || !stops.length) return;
+    if (!ride || !school || !routeStopsKey) return;
     const drive = stops.filter((s) => s.status !== "skipped");
-    const key = `${ride.id}:${drive.map((s) => s.id).join(",")}`;
+    const key = `${ride.id}:${ride.origin_lat ?? ""},${ride.origin_lng ?? ""}:${starterLat ?? ""},${starterLng ?? ""}:${routeStopsKey}`;
     if (key === routeKey.current) return;
     routeKey.current = key;
+    setRoute(null);
+    setSimulationRoute(null);
     const homes = drive.filter((s) => s.kind !== "school").map((s) => ({ id: s.id, name: s.label, lat: s.lat, lng: s.lng }));
-    if (toSchool && ride.origin_lat != null && ride.origin_lng != null) homes.unshift({ id: "origin", name: "Start", lat: ride.origin_lat, lng: ride.origin_lng });
-    let alive = true;
-    getRoute(homes, school, true, !toSchool).then((r) => { if (alive) setRoute(r.geometry); }).catch(() => { if (alive) setRoute(null); });
-    return () => { alive = false; };
-  }, [ride, school, stops, toSchool]);
+    const liveHomes = [...homes];
+    if (toSchool && ride.origin_lat != null && ride.origin_lng != null)
+      liveHomes.unshift({ id: "origin", name: "Start", lat: ride.origin_lat, lng: ride.origin_lng });
+    getRoute(liveHomes, school, true, !toSchool)
+      .then((r) => { if (routeKey.current === key) setRoute(r.geometry); })
+      .catch(() => { if (routeKey.current === key) setRoute(null); });
+    if (toSchool && starterHome) {
+      const firstPickup = homes[0];
+      const origin = firstPickup && firstPickup.lat === starterHome.lat && firstPickup.lng === starterHome.lng ? undefined : starterHome;
+      getRoute(homes, school, true, false, origin)
+        .then((r) => { if (routeKey.current === key) setSimulationRoute(r.geometry); })
+        .catch(() => { if (routeKey.current === key) setSimulationRoute(null); });
+    } else if (toSchool) {
+      getRoute(liveHomes, school, true)
+        .then((r) => { if (routeKey.current === key) setSimulationRoute(r.geometry); })
+        .catch(() => { if (routeKey.current === key) setSimulationRoute(null); });
+    } else {
+      setSimulationRoute(null);
+    }
+  }, [rideId, ride?.origin_lat, ride?.origin_lng, school?.lat, school?.lng, toSchool, routeStopsKey, starterHome, starterLat, starterLng]);
 
   const next = nextOf(stops);
   const mapStops = useMemo<MapStop[]>(() => stops.map((s) => ({ id: s.id, seq: s.seq, lat: s.lat, lng: s.lng, kind: s.kind, status: s.status, label: s.label, sub: s.sub, etaMin: s.eta_min, isNext: next?.id === s.id })), [stops, next?.id]);
-  const { travelled, ahead } = useMemo(() => splitRouteAtCar(route, car), [route, car]);
+  const displayRoute = sim.running && sim.rideId === rideId ? simulationRoute ?? route : route;
+  const { travelled, ahead } = useMemo(() => splitRouteAtCar(displayRoute, car), [displayRoute, car]);
   const mapCar = car && travelled.length > 1
     ? { ...car, lat: travelled[travelled.length - 1][0], lng: travelled[travelled.length - 1][1] }
     : car;
@@ -184,8 +213,9 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
   // ---- demo: simulate the drive along the road route
   function simulate() {
     if (!ride) return;
-    if (!route || route.length < 2) { toast.info("The road route is still loading."); return; }
-    const path: LatLng[] = route;
+    const path = simulationPath;
+    if (!path || path.length < 2) { toast.info("The road route is still loading."); return; }
+    setCar({ lat: path[0][0], lng: path[0][1], heading: null, speed_kmh: 0, stationary: true, updatedAt: Date.now() });
     stopGps();
     const ok = startSimulation({
       rideId, path, stops: stops.filter((s) => s.status !== "skipped").map((s) => ({ lat: s.lat, lng: s.lng })), dwellS: settings?.dwell_s ?? 8,
@@ -258,7 +288,7 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
     <div className="relative h-dvh overflow-hidden bg-bg">
       <div className="absolute inset-0">
         <MapView className="h-full w-full" center={center} zoom={15}
-        stops={mapStops} route={ahead.length > 1 ? ahead : route} travelled={travelled.length > 1 ? travelled : null}
+        stops={mapStops} route={ahead.length > 1 ? ahead : displayRoute} travelled={travelled.length > 1 ? travelled : null}
         car={mapCar} carEta={next?.eta_min ?? null} fences={fences} follow={follow && !!mapCar} traffic={traffic}
         padding={{ bottom: sheet.inset, top: 72 }}
         onStopTap={(id) => { const s = stops.find((x) => x.id === id); if (s) toast({ title: s.label, message: `${s.sub ?? ""}${s.eta_min != null && !TERMINAL.has(s.status) ? ` · ${formatEta(s.eta_min)}` : ""}`.replace(/^ · /, "") }); }}
@@ -334,7 +364,7 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
                     : <Button variant={simActive ? "soft" : "accent"} icon={Satellite} onClick={startGps}>{gps === "error" ? "Retry location" : "Start tracking"}</Button>}
                   {canSimulate && (simActive
                     ? <Button variant="ghost" icon={Square} onClick={() => stopSimulation()}>Pause sim</Button>
-                    : <Button variant="soft" icon={Clapperboard} onClick={simulate} disabled={!stops.length || !route || route.length < 2}>Simulate trip</Button>)}
+                    : <Button variant="soft" icon={Clapperboard} onClick={simulate} disabled={!stops.length || !simulationPath || simulationPath.length < 2}>Simulate trip</Button>)}
                 </div>
                 <Button variant="ghost" icon={Square} loading={busy === "end"} onClick={endTrip} className="text-danger-ink" full>End trip</Button>
               </Card>

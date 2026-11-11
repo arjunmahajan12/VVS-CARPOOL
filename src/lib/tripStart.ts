@@ -1,8 +1,8 @@
 // One tap to start a trip — everything else is decided by two simple rules:
 //   * DIRECTION is chosen by a joined member when starting: "To school" or
 //     "To home" — two separate routes, never inferred from the clock or GPS.
-//   * School runs start at the member's live position and order every pickup
-//     together for the shortest route to school. Home runs start at school,
+//   * School-run pickup order is optimized from the starter's home; live GPS
+//     still begins at the driver's current position. Home runs start at school,
 //     order the other drops, and finish at the organiser's home.
 // Boarding is never assumed: every child checks in by STOP-DETECTION when the
 // car genuinely pulls over at their point (see postLocation on the backends).
@@ -25,7 +25,7 @@ export function currentPosition(timeoutMs = 4000): Promise<{ lat: number; lng: n
 }
 
 
-// Order every school-run pickup from the starter's location to the school.
+// Order every school-run pickup from the starter's home to the school.
 // Home-run drops start at school and include the organiser's home as the end.
 export async function computeOrder(
   ownStops: Stop[],           // organiser-family children (at the organiser's home)
@@ -68,11 +68,12 @@ export async function startTripSmart(opts: {
   const pos = direction === "to_school" ? await currentPosition() : null;
   const schoolGate = { lat: opts.school.lat, lng: opts.school.lng };
   const origin = direction === "to_school" ? pos ?? opts.starterHome ?? opts.creatorHome ?? schoolGate : schoolGate;
+  const orderOrigin = direction === "to_school" ? opts.starterHome ?? pos ?? origin : origin;
   const active = opts.riders.filter((r) => !r.absent && r.home_lat != null && r.home_lng != null);
   const own = active.filter((r) => r.parent_id === opts.creatorFamilyId)
     .map((r) => ({ id: r.child_id, name: "", lat: r.home_lat!, lng: r.home_lng! }));
   const others = active.filter((r) => r.parent_id !== opts.creatorFamilyId)
     .map((r) => ({ id: r.child_id, name: "", lat: r.home_lat!, lng: r.home_lng! }));
-  const order = await computeOrder(own, others, opts.school, opts.creatorHome, direction, origin);
+  const order = await computeOrder(own, others, opts.school, opts.creatorHome, direction, orderOrigin);
   return api.startRide(opts.carpoolId, opts.driverUserId, order, direction, origin?.lat ?? null, origin?.lng ?? null);
 }

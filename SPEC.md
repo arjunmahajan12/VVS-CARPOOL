@@ -13,11 +13,12 @@ These current rules are product behavior, not implementation detail.
 1. **Two routes, chosen explicitly.** Every carpool has a *school run* (`to_school`)
    and a *home run* (`from_school`). A joined member picks which one to start —
    never inferred from the clock or GPS.
-2. **Route.** School run: the starting member's live position → all joined
-   households in the shortest available road order → school. Home run: school
-   → other households in the shortest available road order → the organiser's
-   home. The starting member's location is the school-run origin; a home run
-   always starts at the school gate.
+2. **Route.** School-run pickups are ordered from the starting member's home
+   through all joined households in the shortest available road order to school.
+   Simulation begins at that home; live tracking uses the current GPS position.
+   Home run: school → other households in the shortest available road order →
+   the organiser's home.
+   A home run always starts at the school gate.
 3. **One live-trip controller.** Any joined household can start a carpool trip;
    the account that starts it controls tracking and trip actions, while all other
    members follow read-only. The carpool organiser and school admin can end any
