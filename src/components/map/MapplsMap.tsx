@@ -96,7 +96,7 @@ export default function MapplsMap(props: MapProps) {
       if (!document.getElementById(id)) { setFailed("Map container went missing."); return; }
       let m: Layer = null;
       try {
-        m = CLASS.Map({ id, properties: { center: [c0[0], c0[1]], zoom, zoomControl: false, fullscreenControl: false, traffic: !!cb.current.traffic } });
+        m = CLASS.Map({ id, properties: { center: [c0[0], c0[1]], zoom, zoomControl: true, fullscreenControl: false, traffic: !!cb.current.traffic } });
       } catch (e) { setFailed(String((e as Error)?.message || e)); return; }
       if (!m) { setFailed("The map couldn't be created."); return; }
       map.current = m;
@@ -289,7 +289,7 @@ export default function MapplsMap(props: MapProps) {
   }, [eta, !!car, ready]);
   useEffect(() => {
     if (!map.current || !ready || !follow || !car || !num(car.lat) || !num(car.lng)) return;
-    easeTo({ lat: car.lat, lng: car.lng }, { duration: 900, offsetY: -(padRef.current.bottom - padRef.current.top) / 2 });
+    easeTo({ lat: car.lat, lng: car.lng }, { zoom: getZoom(), duration: 900, offsetY: -(padRef.current.bottom - padRef.current.top) / 2 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [car?.lat, car?.lng, follow, ready]);
 
