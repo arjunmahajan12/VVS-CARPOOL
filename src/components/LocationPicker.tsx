@@ -91,13 +91,13 @@ export default function LocationPicker({
               className="h-11 w-full rounded-[14px] border pl-9 pr-9 text-[15px] outline-none transition focus:ring-2"
               style={{ background: "var(--color-card, #fff)", borderColor: "var(--color-ink-300, #CBD5E1)", color: "var(--color-ink-900, #111A2E)" }}
             />
-            {searching && <span className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin rounded-full border-2 border-slate-300 border-t-[#1F4B99]" aria-hidden />}
+            {searching && <span className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin rounded-full border-2 border-slate-300 border-t-[#9F0622]" aria-hidden />}
             {open && sugs.length > 0 && (
               <ul role="listbox" className="absolute z-30 mt-1 w-full overflow-hidden rounded-[14px] border shadow-lg" style={{ background: "var(--color-card, #fff)", borderColor: "var(--color-ink-300, #CBD5E1)" }}>
                 {sugs.map((s, i) => (
                   <li key={`${s.eLoc || s.placeName}-${i}`} role="option" aria-selected={false}>
                     <button type="button" onClick={() => choose(s)} className="flex w-full items-start gap-2.5 px-3 py-2.5 text-left hover:bg-slate-50 dark:hover:bg-white/5">
-                      <svg className="mt-0.5 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1F4B99" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M12 22s7-7.2 7-12a7 7 0 1 0-14 0c0 4.8 7 12 7 12z" /><circle cx="12" cy="10" r="2.5" /></svg>
+                      <svg className="mt-0.5 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9F0622" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M12 22s7-7.2 7-12a7 7 0 1 0-14 0c0 4.8 7 12 7 12z" /><circle cx="12" cy="10" r="2.5" /></svg>
                       <span className="min-w-0">
                         <span className="block truncate text-[14px] font-semibold">{s.placeName}</span>
                         {s.placeAddress && <span className="block truncate text-[12px] text-slate-500 dark:text-slate-400">{s.placeAddress}</span>}
@@ -112,7 +112,7 @@ export default function LocationPicker({
         <button
           type="button" onClick={locateMe} disabled={locating}
           className={`inline-flex h-11 shrink-0 items-center gap-2 rounded-[14px] px-3.5 text-[13px] font-semibold transition active:scale-[0.98] disabled:opacity-60 ${HAS_MAPPLS ? "" : "flex-1 justify-center"}`}
-          style={{ background: "var(--color-primary-soft, #E8EEF9)", color: "var(--color-primary-soft-ink, #173B7A)" }}
+          style={{ background: "var(--color-primary-soft, #FCEBED)", color: "var(--color-primary-soft-ink, #650419)" }}
         >
           {locating
             ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden />

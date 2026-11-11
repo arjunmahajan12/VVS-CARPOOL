@@ -12,8 +12,8 @@
 import type { StopStatus } from "../../lib/types";
 import { PIN_TONE, STOP_TONE, type MapPin } from "./mapTypes";
 
-export const PRIMARY = "#1F4B99";
-export const PRIMARY_DARK = "#173B7A";
+export const PRIMARY = "#9F0622";
+export const PRIMARY_DARK = "#80051C";
 export const ACCENT = "#F2A900";
 export const INK = "#111A2E";
 export const INK_950 = "#0B1220";

@@ -50,7 +50,7 @@ export function MapError({ onRetry, detail, insetBottom = 0, insetTop = 0 }: { o
           type="button"
           onClick={onRetry}
           className="mt-4 inline-flex h-10 items-center justify-center rounded-[14px] px-5 text-[13px] font-semibold text-white shadow-sm transition active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2"
-          style={{ background: "var(--color-primary-600, #1F4B99)" }}
+          style={{ background: "var(--color-primary-600, #9F0622)" }}
         >
           Retry
         </button>

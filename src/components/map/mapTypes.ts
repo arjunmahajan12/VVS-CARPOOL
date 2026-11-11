@@ -65,5 +65,5 @@ export const STOP_TONE: Record<StopStatus, { fill: string; text: string; ring: s
   skipped:  { fill: "#94A3B8", text: "#FFFFFF", ring: "#E2E8F0", label: "Absent" },
 };
 export const PIN_TONE: Record<MapPin["kind"], string> = {
-  school: "#7F1D1D", home: "#F2A900", family: "#1F4B99", carpool: "#10B981",
+  school: "#7F1D1D", home: "#F2A900", family: "#9F0622", carpool: "#10B981",
 };

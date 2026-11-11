@@ -36,17 +36,17 @@
   --shadow-card: 0 1px 2px rgb(11 18 32 / 0.04), 0 8px 24px -12px rgb(11 18 32 / 0.16);
   --shadow-sheet: 0 -8px 40px -12px rgb(11 18 32 / 0.28), 0 -1px 0 rgb(11 18 32 / 0.04);
 
-  /* ---- primary: marine blue ----------------------------------------- */
-  --color-primary-50: #EEF3FB;
-  --color-primary-100: #DBE5F6;
-  --color-primary-200: #BCCFEE;
-  --color-primary-300: #93B2E3;
-  --color-primary-400: #7FA6F0;
-  --color-primary-500: #3D6BC2;
-  --color-primary-600: #1F4B99;
-  --color-primary-700: #173B7A;
-  --color-primary-800: #122E5F;
-  --color-primary-900: #0E2349;
+  /* ---- primary: Vasant Valley maroon -------------------------------- */
+  --color-primary-50: #FCEBED;
+  --color-primary-100: #F8D4DB;
+  --color-primary-200: #F0A9B6;
+  --color-primary-300: #E47C8E;
+  --color-primary-400: #D64E65;
+  --color-primary-500: #BD2341;
+  --color-primary-600: #9F0622;
+  --color-primary-700: #80051C;
+  --color-primary-800: #650419;
+  --color-primary-900: #4A0315;
 
   /* ---- accent: marigold (live / ETA / key CTA only) ----------------- */
   --color-accent-50: #FFF8E1;
@@ -92,17 +92,17 @@
   --color-info-ink: #0369A1;
 
   /* ---- role aliases (flip in dark) ---------------------------------- */
-  --color-primary: #1F4B99;          /* the brand colour for this theme */
-  --color-primary-strong: #173B7A;   /* hover / pressed */
-  --color-primary-soft: #EEF3FB;     /* soft button, selected chip */
-  --color-primary-soft-ink: #173B7A; /* text on primary-soft */
+  --color-primary: #9F0622;          /* the brand colour for this theme */
+  --color-primary-strong: #80051C;   /* hover / pressed */
+  --color-primary-soft: #FCEBED;     /* soft button, selected chip */
+  --color-primary-soft-ink: #650419; /* text on primary-soft */
   --color-on-primary: #FFFFFF;
   --color-accent: #F2A900;
   --color-accent-strong: #D99500;
   --color-accent-soft: #FFF3CC;
   --color-accent-soft-ink: #8A5E00;
   --color-on-accent: #0B1220;
-  --color-focus: #3D6BC2;
+  --color-focus: #BD2341;
 
   /* ---- motion ------------------------------------------------------- */
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
@@ -138,17 +138,17 @@
     --color-info-soft: rgb(14 165 233 / 0.16);
     --color-info-ink: #6BCBF5;
 
-    --color-primary: #7FA6F0;
-    --color-primary-strong: #9DBBF4;
-    --color-primary-soft: rgb(127 166 240 / 0.14);
-    --color-primary-soft-ink: #A9C4F5;
-    --color-on-primary: #0B1220;
+    --color-primary: #F08A9A;
+    --color-primary-strong: #F6A6B2;
+    --color-primary-soft: rgb(240 138 154 / 0.14);
+    --color-primary-soft-ink: #F6A6B2;
+    --color-on-primary: #4A0315;
     --color-accent: #F2A900;
     --color-accent-strong: #FBCF57;
     --color-accent-soft: rgb(242 169 0 / 0.16);
     --color-accent-soft-ink: #FBCF57;
     --color-on-accent: #0B1220;
-    --color-focus: #7FA6F0;
+    --color-focus: #F08A9A;
 
     --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 10px 28px -14px rgb(0 0 0 / 0.6);
     --shadow-sheet: 0 -8px 40px -10px rgb(0 0 0 / 0.7), 0 -1px 0 rgb(255 255 255 / 0.04);
@@ -208,17 +208,17 @@
 }
 
 @layer components {
-  /* Home live-trip hero: deep marine, one soft highlight, no rainbow. */
+  /* Home live-trip hero: deep maroon, one soft highlight, no rainbow. */
   .hero-card {
     background:
-      radial-gradient(90% 80% at 100% 0%, rgb(127 166 240 / 0.28), transparent 60%),
+      radial-gradient(90% 80% at 100% 0%, rgb(228 124 142 / 0.28), transparent 60%),
       linear-gradient(160deg, var(--color-primary-700), var(--color-primary-900));
     color: #fff;
   }
   .dark .hero-card {
     background:
-      radial-gradient(90% 80% at 100% 0%, rgb(127 166 240 / 0.22), transparent 60%),
-      linear-gradient(160deg, #1B3A78, #0E2349);
+      radial-gradient(90% 80% at 100% 0%, rgb(240 138 154 / 0.22), transparent 60%),
+      linear-gradient(160deg, #80051C, #4A0315);
   }
 }
 
