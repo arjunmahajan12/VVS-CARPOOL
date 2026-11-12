@@ -7,6 +7,8 @@
 import { api } from "./api";
 import { bearingDeg, densify, nearestIndex, type LatLng } from "./geo";
 
+export const SIMULATION_TICK_MS = 350;
+
 export interface SimState { rideId: string | null; running: boolean; step: number; total: number; }
 const state: SimState = { rideId: null, running: false, step: 0, total: 0 };
 const listeners = new Set<(s: SimState) => void>();
@@ -71,9 +73,23 @@ export function buildPlan(path: LatLng[], stops: { lat: number; lng: number }[],
   return out;
 }
 
+export function simulationEtaSeconds(
+  path: LatLng[],
+  car: { lat: number; lng: number } | null,
+  stop: { lat: number; lng: number } | null,
+  tickMs = SIMULATION_TICK_MS,
+): number | null {
+  if (!car || !stop || path.length < 2) return null;
+  const dense = densify(path, 60);
+  const from = nearestIndex(dense, car.lat, car.lng);
+  const to = nearestIndex(dense, stop.lat, stop.lng);
+  if (from.km > 0.25 || to.km > 0.3) return null;
+  return Math.max(0, to.index - from.index) * tickMs / 1000;
+}
+
 export function startSimulation(o: SimOptions): boolean {
   stopSimulation();
-  const tickMs = o.tickMs ?? 700;
+  const tickMs = o.tickMs ?? SIMULATION_TICK_MS;
   const plan = buildPlan(o.path, o.stops, o.dwellS, tickMs);
   if (!plan.length) { o.onError?.("No route to simulate yet."); return false; }
   state.rideId = o.rideId; state.running = true; state.step = 0; state.total = plan.length; notify();

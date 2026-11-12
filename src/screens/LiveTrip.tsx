@@ -12,13 +12,18 @@ import { nav } from "../lib/nav";
 import { directionLabel, fmtTime, timeAgo } from "../lib/format";
 import { getRoute } from "../lib/routing";
 import { haversineKm, splitRouteAtCar, type LatLng } from "../lib/geo";
-import { onSimChange, startSimulation, stopIfRide, stopSimulation, type SimState } from "../lib/simulate";
+import { onSimChange, SIMULATION_TICK_MS, simulationEtaSeconds, startSimulation, stopIfRide, stopSimulation, type SimState } from "../lib/simulate";
 import type { Ride, RideEvent, Rider, Settings, Stop } from "../lib/types";
 import { Avatar, Button, Card, EmptyState, IconButton, LiveBadge, Pill, ProgressRail, SectionTitle, Skeleton, StatusBadge, TopBar, formatEta, useConfirm, useToast, cn, type RailItem } from "../components/ui";
 import { BottomSheet, MapView, SheetHeader, VVS, useSheetInset, type MapFence, type MapStop } from "../components/map";
 
 const TERMINAL = new Set<Stop["status"]>(["done", "missed", "skipped"]);
 const nextOf = (stops: Stop[]) => stops.find((s) => !TERMINAL.has(s.status)) ?? null;
+const formatCountdown = (seconds: number) => {
+  if (seconds <= 0) return "Arriving";
+  const remaining = Math.ceil(seconds);
+  return `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`;
+};
 
 const EVENT_ICON: Record<string, { icon: typeof Radio; cls: string }> = {
   started: { icon: Radio, cls: "bg-accent-soft text-accent-soft-ink" },
@@ -147,9 +152,13 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
     }
   }, [rideId, ride?.origin_lat, ride?.origin_lng, school?.lat, school?.lng, toSchool, routeStopsKey, starterHome, starterLat, starterLng]);
 
-  const next = nextOf(stops);
-  const mapStops = useMemo<MapStop[]>(() => stops.map((s) => ({ id: s.id, seq: s.seq, lat: s.lat, lng: s.lng, kind: s.kind, status: s.status, label: s.label, sub: s.sub, etaMin: s.eta_min, isNext: next?.id === s.id })), [stops, next?.id]);
   const displayRoute = sim.running && sim.rideId === rideId ? simulationRoute ?? route : route;
+  const next = nextOf(stops);
+  const simActive = sim.running && sim.rideId === rideId;
+  const simEtaSeconds = simActive && next
+    ? simulationEtaSeconds(displayRoute ?? [], car, next, SIMULATION_TICK_MS)
+    : null;
+  const mapStops = useMemo<MapStop[]>(() => stops.map((s) => ({ id: s.id, seq: s.seq, lat: s.lat, lng: s.lng, kind: s.kind, status: s.status, label: s.label, sub: s.sub, etaMin: s.eta_min, isNext: next?.id === s.id })), [stops, next?.id]);
   const { travelled, ahead } = useMemo(() => splitRouteAtCar(displayRoute, car), [displayRoute, car]);
   const mapCar = car && travelled.length > 1
     ? { ...car, lat: travelled[travelled.length - 1][0], lng: travelled[travelled.length - 1][1] }
@@ -281,7 +290,6 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
     return { id: s.id, seq: s.seq, label: s.label, sub, status: s.status, etaMin: s.eta_min, delayMin: s.delay_min, isNext: next?.id === s.id, trailing };
   });
   const feed = [...events].sort((a, b) => (a.created_at < b.created_at ? 1 : -1)).slice(0, 12);
-  const simActive = sim.running && sim.rideId === rideId;
   const sharing = gps === "on" || simActive;
 
   return (
@@ -309,7 +317,7 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
           <SheetHeader
             title={ended ? "Trip completed" : next ? (next.kind === "school" ? "Heading to the school gate" : next.kind === "home_end" ? "Heading back home" : `Next: ${next.label}`) : ride ? "Finishing up" : "Loading…"}
             sub={ride ? `${doneCount}/${stops.length} stops · ${ride.driver_name ?? "Driver"}${ride.driver_vehicle ? ` · ${ride.driver_vehicle}` : ""} · started ${fmtTime(ride.started_at)}` : undefined}
-            right={ended ? <Pill tone="ok" dot>Done</Pill> : next?.eta_min != null ? <LiveBadge>{formatEta(next.eta_min)}</LiveBadge> : ride ? <LiveBadge /> : null}
+            right={ended ? <Pill tone="ok" dot>Done</Pill> : simEtaSeconds != null ? <LiveBadge>{formatCountdown(simEtaSeconds)}</LiveBadge> : next?.eta_min != null ? <LiveBadge>{formatEta(next.eta_min)}</LiveBadge> : ride ? <LiveBadge /> : null}
           />
         }
       >

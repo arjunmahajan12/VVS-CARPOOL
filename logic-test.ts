@@ -5,6 +5,7 @@
 import { demoBackend as api } from "./src/lib/demo";
 import { subscriberCount } from "./src/lib/bus";
 import { optimalOrder } from "./src/lib/optimize";
+import { simulationEtaSeconds } from "./src/lib/simulate";
 import type { Stop, Notification, ChatMessage, RideEvent } from "./src/lib/types";
 
 interface Hooks { __VVS_DWELL_MS?: number; __VVS_NOW?: number; __VVS_LATENCY_MS?: number; }
@@ -73,6 +74,12 @@ async function run() {
     [0, 1, 100, 0],
   ]);
   ok(routeHome[0].id === "near-end", "home-run ordering accounts for the organiser's fixed final stop");
+  const simPath: [number, number][] = [[0, 0], [0, 0.001], [0, 0.002], [0, 0.003]];
+  const simStop = { lat: 0, lng: 0.003 };
+  const etaAtStart = simulationEtaSeconds(simPath, { lat: 0, lng: 0 }, simStop);
+  const etaNearStop = simulationEtaSeconds(simPath, { lat: 0, lng: 0.002 }, simStop);
+  ok(etaAtStart != null && etaNearStop != null && etaAtStart > etaNearStop, "simulation countdown decreases as the car approaches its next stop");
+  ok(simulationEtaSeconds(simPath, { lat: 0, lng: 0.003 }, simStop) === 0, "simulation countdown reaches zero at the next stop");
   ok(cp1.is_org_household === true && cp1.is_creator === true, "organiser sees is_org_household + is_creator");
   ok(!!cp1.stats && typeof cp1.stats.trips === "number" && cp1.stats.trips > 0, "getCarpool includes stats with seeded trips");
 
