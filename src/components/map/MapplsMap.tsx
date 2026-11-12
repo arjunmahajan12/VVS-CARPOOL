@@ -23,7 +23,7 @@ const READY_FALLBACK_MS = 2500;
 
 export default function MapplsMap(props: MapProps) {
   const {
-    center, zoom = 13, pins = [], stops = [], route, travelled, car, carEta, fences = [], radius, corridor,
+    center, zoom = 13, pins = [], stops = [], route, travelled, car, carEta, carEtaLabel, fences = [], radius, corridor,
     follow = false, traffic = false, cluster = false, padding, className,
   } = props;
   const id = `vvs-map-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
@@ -275,7 +275,7 @@ export default function MapplsMap(props: MapProps) {
       if (etaMarker.current) remove([etaMarker.current]); etaMarker.current = null; etaText.current = "";
     },
   );
-  const eta = etaLabel(carEta);
+  const eta = carEtaLabel ?? etaLabel(carEta);
   useEffect(() => {
     if (!map.current || !ready) return;
     if (!car || !eta) { if (etaMarker.current) remove([etaMarker.current]); etaMarker.current = null; etaText.current = ""; return; }

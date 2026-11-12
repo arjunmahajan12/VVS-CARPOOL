@@ -297,7 +297,10 @@ export default function LiveTrip({ rideId }: { rideId: string }) {
       <div className="absolute inset-0">
         <MapView className="h-full w-full" center={center} zoom={15}
         stops={mapStops} route={ahead.length > 1 ? ahead : displayRoute} travelled={travelled.length > 1 ? travelled : null}
-        car={mapCar} carEta={next?.eta_min ?? null} fences={fences} follow={follow && !!mapCar} traffic={traffic}
+        car={mapCar}
+        carEta={simActive && simEtaSeconds != null ? null : next?.eta_min ?? null}
+        carEtaLabel={simActive && simEtaSeconds != null ? formatCountdown(simEtaSeconds) : null}
+        fences={fences} follow={follow && !!mapCar} traffic={traffic}
         padding={{ bottom: sheet.inset, top: 72 }}
         onStopTap={(id) => { const s = stops.find((x) => x.id === id); if (s) toast({ title: s.label, message: `${s.sub ?? ""}${s.eta_min != null && !TERMINAL.has(s.status) ? ` · ${formatEta(s.eta_min)}` : ""}`.replace(/^ · /, "") }); }}
       />

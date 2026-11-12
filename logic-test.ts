@@ -80,6 +80,10 @@ async function run() {
   const etaNearStop = simulationEtaSeconds(simPath, { lat: 0, lng: 0.002 }, simStop);
   ok(etaAtStart != null && etaNearStop != null && etaAtStart > etaNearStop, "simulation countdown decreases as the car approaches its next stop");
   ok(simulationEtaSeconds(simPath, { lat: 0, lng: 0.003 }, simStop) === 0, "simulation countdown reaches zero at the next stop");
+  const turnPath: [number, number][] = [[0, 0], [0, 0.001], [0, 0.002], [0.001, 0.002], [0.002, 0.002]];
+  const turnStop = { lat: 0.002, lng: 0.002 };
+  const turnEtas = turnPath.map((p) => simulationEtaSeconds(turnPath, { lat: p[0], lng: p[1] }, turnStop));
+  ok(turnEtas.every((eta, i) => eta != null && (i === 0 || eta <= (turnEtas[i - 1] ?? Infinity))), "simulation countdown never increases while turning along the route");
   ok(cp1.is_org_household === true && cp1.is_creator === true, "organiser sees is_org_household + is_creator");
   ok(!!cp1.stats && typeof cp1.stats.trips === "number" && cp1.stats.trips > 0, "getCarpool includes stats with seeded trips");
 

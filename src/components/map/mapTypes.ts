@@ -24,6 +24,7 @@ export interface MapProps {
   travelled?: [number, number][] | null;    // already driven — drawn muted
   car?: { lat: number; lng: number; heading?: number | null } | null;
   carEta?: number | null;                   // chip beside the car ("4 min")
+  carEtaLabel?: string | null;              // custom simulation countdown beside the car
   fences?: MapFence[];
   radius?: { lat: number; lng: number; km: number } | null;   // discovery ring
   corridor?: [number, number][] | null;     // "on your way" highlight
