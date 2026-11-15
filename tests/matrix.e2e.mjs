@@ -13,7 +13,7 @@ const ok=(c,l)=>{ results.push([!!c,l]); if(!c) console.log("  ✗ "+l); };
 const ROLES = {
   asha:  { email:"asha@demo.in",  screens:["#/home","#/discover","#/carpools","#/alerts","#/profile","#/family","#/car","#/settings","#/history"] },
   priya: { email:"priya@demo.in", screens:["#/home","#/discover","#/carpools"] },
-  dadi:  { email:"dadi@demo.in",  screens:["#/home","#/carpools","#/profile","#/settings"] },
+  dadi:  { email:"nkmnewdelhi@gmail.com",  screens:["#/home","#/carpools","#/profile","#/settings"] },
   driver:{ email:"driver@demo.in",screens:["#/home","#/carpools","#/profile","#/car"] },
   admin: { email:"admin@vasantvalley.demo", screens:["#/admin/dashboard","#/admin/verify","#/admin/carpools","#/admin/incidents","#/admin/settings","#/admin/notices","#/alerts","#/profile"] },
 };

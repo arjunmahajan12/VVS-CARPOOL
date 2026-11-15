@@ -5,7 +5,7 @@
 --   parents : asha@demo.in (organiser, has a car) · vikram@demo.in (2 kids)
 --             neha@demo.in (member of Asha's carpool) · rahul@demo.in
 --             priya@demo.in (NO car) · sunita@demo.in (invited) · rohan@demo.in (pending)
---   add-ons : driver@demo.in (Asha's confirmed driver Ramesh) · dadi@demo.in (grandparent)
+--   add-ons : driver@demo.in (Asha's confirmed driver Ramesh) · nkmnewdelhi@gmail.com (grandparent)
 --             suresh@demo.in (Vikram's driver)
 --   admin   : admin@vasantvalley.demo
 -- Safe to re-run: it deletes and recreates these accounts only.
@@ -47,7 +47,7 @@ begin
       (u_admin,  'admin@vasantvalley.demo'),
       (u_asha,   'asha@demo.in'),  (u_vikram, 'vikram@demo.in'), (u_neha,  'neha@demo.in'),
       (u_rahul,  'rahul@demo.in'), (u_priya,  'priya@demo.in'),  (u_sunita,'sunita@demo.in'),
-      (u_rohan,  'rohan@demo.in'), (u_ramesh, 'driver@demo.in'), (u_dadi,  'dadi@demo.in'),
+      (u_rohan,  'rohan@demo.in'), (u_ramesh, 'driver@demo.in'), (u_dadi,  'nkmnewdelhi@gmail.com'),
       (u_suresh, 'suresh@demo.in')) v(id, email)
   loop
     insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -87,12 +87,12 @@ begin
   -- ---- family add-ons (invite + linked profile) ---------------------------
   insert into addon_invites(parent_id,name,email,relation) values
    (u_asha,  'Ramesh Kumar','driver@demo.in','driver'),
-   (u_asha,  'Relatives',   'dadi@demo.in',  'grandparent'),
+   (u_asha,  'Relatives',   'nkmnewdelhi@gmail.com',  'grandparent'),
    (u_vikram,'Suresh Yadav','suresh@demo.in','driver');
   insert into profiles(id,role,name,email,phone,parent_owner_id,relation,status,tnc_version,vehicle,driver_status) values
    (u_ramesh,'addon','Ramesh Kumar','driver@demo.in','+91 98700 12345',u_asha,  'driver','approved',1,
       '{"make_model":"Maruti Ertiga","color":"Silver","plate":"DL 3C AB 1234","seats":6}'::jsonb,'verified'),
-   (u_dadi,  'addon','Relatives',   'dadi@demo.in',  null,             u_asha,  'grandparent','approved',1,null,null),
+   (u_dadi,  'addon','Relatives',   'nkmnewdelhi@gmail.com',  null,             u_asha,  'grandparent','approved',1,null,null),
    (u_suresh,'addon','Suresh Yadav','suresh@demo.in','+91 98220 55667',u_vikram,'driver','approved',1,
       '{"make_model":"Toyota Innova","color":"White","plate":"DL 8C XY 7788","seats":7}'::jsonb,'verified');
 
