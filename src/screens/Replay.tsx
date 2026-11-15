@@ -8,7 +8,7 @@ import { nav } from "../lib/nav";
 import { directionLabel, fmtDate, fmtTime } from "../lib/format";
 import { bearingDeg, type LatLng } from "../lib/geo";
 import type { RideEvent, Stop, StopStatus, TripReplay } from "../lib/types";
-import { Button, Card, EmptyState, IconButton, Pill, ProgressRail, SectionTitle, Skeleton, Stat, StatusBadge, TopBar, cn, type RailItem } from "../components/ui";
+import { Button, Card, EmptyState, IconButton, ProgressRail, SectionTitle, Skeleton, Stat, StatusBadge, TopBar, cn, type RailItem } from "../components/ui";
 import { BottomSheet, MapView, SheetHeader, VVS, useSheetInset, type MapStop } from "../components/map";
 
 const ms = (iso: string | null | undefined) => (iso ? new Date(iso).getTime() : NaN);
@@ -89,7 +89,6 @@ export default function Replay({ rideId }: { rideId: string }) {
           <SheetHeader
             title={cur ? <span className="tnum">{fmtTime(cur.created_at)}{elapsed != null ? <span className="ml-2 text-sm font-medium text-ink-500">+{elapsed} min</span> : null}</span> : "Replay"}
             sub={cur ? `${cur.speed_kmh != null ? `${Math.round(cur.speed_kmh)} km/h · ` : ""}ping ${Math.min(i, n - 1) + 1} of ${n}` : undefined}
-            right={ride ? (ride.on_time === true ? <Pill tone="ok" dot>On time</Pill> : ride.on_time === false ? <Pill tone="warn" dot>Late</Pill> : <Pill tone={ride.status === "completed" ? "ok" : "neutral"} dot>{ride.status === "completed" ? "Completed" : ride.status}</Pill>) : null}
           />
         }
       >
