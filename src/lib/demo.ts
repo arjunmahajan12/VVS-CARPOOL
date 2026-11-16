@@ -850,7 +850,10 @@ export const demoBackend: Backend = {
         home_lat: data.home_lat ?? null, home_lng: data.home_lng ?? null, existing_carpool: !!data.existing_carpool, can_drive: data.can_drive !== false,
         status: "pending", tnc_version: data.accept_tnc ? latestTncVersion() : 0 });
       if (data.child_name && data.child_name.trim())
-        u.children.push({ id: uid(), name: data.child_name, class_level: Number(data.child_class) || 1, gender: data.child_gender ?? null });
+        u.children.push({
+          id: uid(), name: data.child_name, class_level: Number(data.child_class) || 1,
+          roll_number: data.child_roll_number?.trim() || null, gender: data.child_gender ?? null,
+        });
     }
     currentId = u.id; pendingEmail = null;
     users.filter((x) => x.role === "admin").forEach((a) => notify(a.id, "New registration to verify", `${data.name} registered and needs verification.`, "system"));

@@ -60,6 +60,7 @@ create table if not exists children (
   name text not null, class_level int not null default 1, gender text,
   allergies text, emergency_name text, emergency_phone text, photo_url text
 );
+alter table children add column if not exists roll_number text;
 
 create table if not exists addon_invites (
   id uuid primary key default gen_random_uuid(),
@@ -285,7 +286,7 @@ create or replace function _profile_json(pid uuid) returns jsonb language sql st
     'latest_tnc',_latest_tnc(),
     'needs_tnc',(p.role <> 'addon' and p.tnc_version < _latest_tnc()),
     'push_enabled',exists(select 1 from push_subscriptions ps where ps.user_id=p.id),
-    'children',coalesce((select jsonb_agg(jsonb_build_object('id',c.id,'name',c.name,'class_level',c.class_level,'gender',c.gender,
+    'children',coalesce((select jsonb_agg(jsonb_build_object('id',c.id,'name',c.name,'class_level',c.class_level,'roll_number',c.roll_number,'gender',c.gender,
        'allergies',c.allergies,'emergency_name',c.emergency_name,'emergency_phone',c.emergency_phone,'photo_url',c.photo_url) order by c.id) from children c where c.parent_id=p.id),'[]'::jsonb),
     'addons',coalesce((select jsonb_agg(jsonb_build_object(
         'id',coalesce(pr.id, a.id),'name',a.name,'email',a.email,'relation',a.relation,
@@ -532,7 +533,8 @@ begin
       coalesce((data->>'can_drive')::boolean,true),'pending', case when (data->>'accept_tnc')::boolean then _latest_tnc() else 0 end)
     on conflict (id) do update set name=excluded.name;
   if data ? 'child_name' and coalesce(data->>'child_name','')<>'' then
-    insert into children(parent_id,name,class_level,gender) values (auth.uid(),data->>'child_name',coalesce((data->>'child_class')::int,1),data->>'child_gender');
+    insert into children(parent_id,name,class_level,roll_number,gender) values
+      (auth.uid(),data->>'child_name',coalesce((data->>'child_class')::int,1),nullif(trim(data->>'child_roll_number'),''),data->>'child_gender');
   end if;
   for a in select id from profiles where role='admin' loop perform _notify(a,'New registration to verify',(data->>'name')||' registered and needs verification.','system'); end loop;
   perform _notify(auth.uid(),'Registration received','Your details were sent to the school for verification.','system');

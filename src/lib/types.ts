@@ -4,7 +4,7 @@ export type Status = "pending" | "approved" | "rejected";
 export type Direction = "to_school" | "from_school";
 
 export interface Child {
-  id: string; name: string; class_level: number; gender?: string | null;
+  id: string; name: string; class_level: number; roll_number?: string | null; gender?: string | null;
   photo_url?: string | null; allergies?: string | null; emergency_name?: string | null; emergency_phone?: string | null;
 }
 export interface Addon { id: string; name: string; email: string; relation?: string | null; driver_status?: string | null; vehicle?: Vehicle | null; signed_up?: boolean; }
@@ -148,7 +148,7 @@ export interface AdminAnalytics extends CarpoolStats {
 export interface PushSubscriptionJSON { endpoint: string; keys: { p256dh: string; auth: string }; }
 export interface RegisterData {
   name: string; phone?: string; address?: string; colony?: string; pincode?: string;
-  child_name?: string; child_class?: number | string; child_gender?: string;
+  child_name?: string; child_class?: number | string; child_roll_number?: string; child_gender?: string;
   home_lat?: number; home_lng?: number; can_drive?: boolean; existing_carpool?: boolean;
   accept_tnc: boolean; relation?: string;
 }

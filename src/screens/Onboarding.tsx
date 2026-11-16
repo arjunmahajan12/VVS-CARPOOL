@@ -28,7 +28,7 @@ export default function Onboarding() {
   const [showTnc, setShowTnc] = useState(false);
   const [f, setF] = useState({
     name: "", phone: "", address: "", colony: "", pincode: "",
-    child_name: "", child_class: "1", child_gender: "",
+    child_name: "", child_class: "1", child_roll_number: "", child_gender: "",
     can_drive: true, existing_carpool: false, accept_tnc: false,
   });
   const [err, setErr] = useState<Record<string, string>>({});
@@ -70,7 +70,8 @@ export default function Onboarding() {
       await register({
         name: f.name.trim(), phone: f.phone.trim() || undefined, address: f.address.trim() || undefined,
         colony: f.colony.trim() || undefined, pincode: f.pincode.trim() || undefined,
-        child_name: f.child_name.trim(), child_class: Number(f.child_class), child_gender: f.child_gender || undefined,
+        child_name: f.child_name.trim(), child_class: Number(f.child_class), child_roll_number: f.child_roll_number.trim() || undefined,
+        child_gender: f.child_gender || undefined,
         home_lat: home.lat, home_lng: home.lng, can_drive: f.can_drive, existing_carpool: f.existing_carpool, accept_tnc: true,
       });
       toast.ok("Welcome! The school will verify your family shortly.");
@@ -154,6 +155,7 @@ export default function Onboarding() {
                 <Select label="Class" options={CLASS_OPTIONS} value={f.child_class} onChange={(e) => set("child_class", e.target.value)} />
                 <Select label="Gender" placeholder="Optional" options={GENDER_OPTIONS} value={f.child_gender} onChange={(e) => set("child_gender", e.target.value)} />
               </div>
+              <Input label="Roll number" placeholder="Optional" value={f.child_roll_number} onChange={(e) => set("child_roll_number", e.target.value)} />
             </div>
             <p className="mt-3 text-xs text-ink-500">More children? Add them from Profile → Family after you're in.</p>
           </Card>
